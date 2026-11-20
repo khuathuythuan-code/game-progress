@@ -12,21 +12,49 @@ data.js      – ⭐ TOÀN BỘ nội dung: sửa file này khi cập nhật
 images/      – ảnh game (hiện là ảnh mẫu .svg, thay bằng .png/.jpg của bạn)
 ```
 
+## Thanh trên cùng, lọc game, cuộn lên đầu
+- Nút **Chỉnh sửa** nằm ở góc phải thanh trên cùng (thanh này luôn dính ở đầu màn hình khi cuộn).
+- **Lọc game**: ô tìm kiếm (tìm theo tên, thể loại, nền tảng, mô tả; gõ không dấu vẫn tìm được),
+  nút lọc theo mục (Hoàn thành / Đang phát triển / Dự kiến) và lọc theo thể loại.
+- Nút mũi tên ở góc phải dưới hiện ra khi cuộn xuống, bấm để về đầu trang.
+
 ## Hai chế độ
 
 - **Chế độ xem** (mặc định, dành cho sếp): gọn, không có nút sửa/xóa.
-- **Chế độ chỉnh sửa**: bấm "Chỉnh sửa trang này" ở cuối trang (hoặc mở link có `?edit`).
-  Cho phép tích việc, thêm/xóa việc, xóa game, xóa nhận xét, chỉnh % tiến độ.
-  Thay đổi chỉ lưu trên trình duyệt của bạn. Muốn giữ lâu dài: bấm **Sao chép dữ liệu**
-  rồi dán đè vào `data.js`. Mọi thao tác xóa đều có nút **Hoàn tác** trong 7 giây.
+- **Chế độ chỉnh sửa**: bấm **Chỉnh sửa** trên thanh trên cùng (hoặc mở link có `?edit`). Sửa thẳng trên trang:
+  - **Chữ**: bấm vào tên game, thể loại, nền tảng, ghi chú, mô tả, nội dung từng việc, chú thích ảnh
+    (ô viền nét đứt) và gõ. Rời ô là tự ghi nhận. Enter để xong (riêng mô tả, Enter xuống dòng).
+  - **Ảnh**: **Thay ảnh** / **Xóa** trên mỗi ảnh, **+ Thêm ảnh** ở cuối dải ảnh. Ảnh được tự thu nhỏ
+    (tối đa 1280px) và nén để nhẹ.
+  - **Tài liệu tham khảo**: sửa tên và địa chỉ, **+ Thêm tài liệu**, nút ✕ để xóa.
+  - **Việc cần làm**: tích xong, thêm, xóa, sửa chữ. **Tiến độ**: thanh kéo %.
+  - **Thêm game mới**: nút **+ Thêm game vào "…"** ở cuối mỗi mục. **Xóa game**: nút ✕.
+  - **Chuyển game sang mục khác**: ở đầu mỗi game, kéo nút **⠿ Kéo** thả vào mục khác, hoặc chọn mục
+    ở ô bên phải (dùng cho điện thoại, nơi không kéo thả được). Chuyển sang "Hoàn thành" thì tiến độ
+    tự thành 100%, sang "Dự kiến" thì về 0%.
+  - Mọi thao tác xóa/chuyển đều có nút **Hoàn tác** trong 7 giây.
+- **Lưu lên web** (nút xanh ở thanh dưới): ghi mọi thay đổi vào GitHub, trang công khai cập nhật sau
+  khoảng 1 phút. **Bỏ thay đổi** để quay về bản đang chạy. **Sao chép dữ liệu** là cách thủ công
+  (dán vào `data.js`), không kèm ảnh mới.
 
-## Cập nhật nội dung (data.js)
+### Lưu lên web: cần token GitHub (một lần)
+Lần đầu bấm Lưu, trang hỏi token. Tạo ở github.com/settings/personal-access-tokens/new:
+repo chỉ chọn `game-progress`, quyền **Contents = Read and write**, đặt hạn (ví dụ 90 ngày).
+Token **chỉ lưu trong trình duyệt của bạn**, không nằm trong code hay repo. Hãy coi như mật khẩu và chỉ
+dùng trên máy của bạn. Hết hạn thì tạo token mới và dán lại. Có thể xóa token ngay trong hộp thoại.
+Nếu bạn sửa cùng lúc từ hai máy, lần lưu sau sẽ ghi đè lần trước.
+Trang nạp `data.js` kèm mã thời gian nên người xem thấy bản mới ngay khi GitHub Pages deploy xong.
 
+## Cập nhật nội dung bằng tay (data.js)
+
+Vẫn sửa tay được nếu muốn:
 - **Thêm game**: copy một khối game trong `games` của mục cần thêm, đổi `id` (không trùng), tên, mô tả, ảnh...
-- **Chuyển mục** (Đang phát triển → Hoàn thành): cắt khối game dán sang mục khác, đặt `progress: 100`.
+- **Chuyển mục**: cắt khối game dán sang mục khác, đặt `progress` cho hợp.
 - **Thêm ảnh**: bỏ file vào `images/`, thêm `{ src: "images/ten-anh.png", caption: "Chú thích" }`.
   Ảnh nên tỉ lệ 16:9 (ví dụ 1280×720), dưới ~300KB mỗi ảnh.
 - **Đổi ngày cập nhật**: sửa `updated`.
+- Phần chú thích đầu `data.js` được giữ nguyên khi dùng Lưu lên web, nhưng **đừng viết chú thích bên
+  trong phần dữ liệu** vì sẽ bị ghi đè.
 
 ## Nhận xét theo từng phần giao diện
 
@@ -71,6 +99,38 @@ Nếu gửi tự động thất bại (mất mạng...), nhận xét vẫn đư�
 
 Muốn nhận xét của sếp hiện cho mọi người xem, thêm vào mảng `comments` của game trong `data.js`:
 `{ id: "cm-9", author: "Sếp", text: "Nội dung", time: "2026-11-20T09:30:00" }`.
+
+## Chat hai chiều giữa bạn và sếp (Firebase)
+
+Khi bật chat, các nhận xét trở thành **hội thoại chung**: tin của sếp hiện ngay cho bạn, tin trả lời
+của bạn hiện ngay cho sếp, không cần tải lại trang. Nội dung trang vẫn lưu trong git như cũ, chỉ chat
+nằm trên Firebase Firestore (gói miễn phí Spark).
+
+### Cách hoạt động và bảo mật
+- Chat chỉ mở khi trang được mở bằng **link bí mật**: `https://.../game-progress/?k=<mã-bí-mật>`.
+  Mã dài 20 ký tự trở lên, **không nằm trong code hay repo**. Người không có mã chỉ xem được nội dung,
+  không thấy chat và không nhắn được. Trình duyệt nhớ mã sau lần đầu mở link.
+- Ai có link thì đọc và viết được: chỉ gửi link cho sếp. Nếu lộ, đổi mã mới (gửi link mới cho sếp,
+  tin cũ ở mã cũ sẽ không còn hiện).
+- Quy tắc bảo mật của Firestore nằm trong `firestore.rules`.
+- Tin nhắn lưu trên máy chủ Google, không mã hóa đầu cuối.
+- Sếp nhắn thì email vẫn báo về cho bạn (qua `notify`). Tin bạn trả lời không gửi email.
+  Link trong email **không chứa mã bí mật**: hãy mở link đó trên trình duyệt bạn đã từng vào bằng link có mã.
+
+### Cài đặt (một lần, khoảng 10 phút)
+1. Vào console.firebase.google.com, **Create a project**, đặt tên, tắt Google Analytics, Create.
+2. Menu trái chọn **Build, Firestore Database, Create database**. Chọn vị trí gần bạn
+   (ví dụ `asia-southeast1` Singapore, **không đổi được sau này**), chọn **production mode**, Enable.
+3. Mở tab **Rules**, dán toàn bộ nội dung file `firestore.rules`, bấm **Publish**.
+4. Vào **Project settings** (biểu tượng bánh răng), mục **Your apps**, bấm biểu tượng web `</>`, đặt tên
+   rồi **Register app**. Copy các giá trị `apiKey`, `authDomain`, `projectId`, `appId`.
+5. Trong `data.js` điền các giá trị đó và đổi `provider` thành `"firebase"`:
+   `chat: { provider: "firebase", firebase: { apiKey: "...", authDomain: "...", projectId: "...", appId: "..." } }`
+6. Commit và push. Gửi sếp link `https://khuathuythuan-code.github.io/game-progress/?k=<mã-bí-mật>`.
+   Bạn cũng mở trang bằng link có mã đó một lần trên máy của mình.
+
+Chưa điền cấu hình Firebase thì trang tự chạy ở chế độ cũ (nhận xét lưu trên máy người viết + email).
+`provider: "local"` chỉ để thử giao diện giữa các tab cùng một trình duyệt, đừng dùng thật.
 
 ## Xem thử trên máy
 

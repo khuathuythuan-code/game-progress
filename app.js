@@ -6,9 +6,38 @@
   const MODE_KEY = "game-progress-edit-mode";
   const NAME_KEY = "game-progress-author";
   const $ = (id) => document.getElementById(id);
-  const EMPTY = () => ({ delGames: [], delTasks: [], done: {}, added: {}, comments: {}, delComments: [], progress: {} });
+  // state = các chỉnh sửa chưa lưu lên web (nằm trong trình duyệt này):
+  // fields/links/images/moved/newGames/taskText là sửa trực tiếp trên trang, các mục còn lại như cũ.
+  const EMPTY = () => ({
+    delGames: [], delTasks: [], done: {}, added: {}, comments: {}, delComments: [], progress: {},
+    fields: {}, links: {}, images: {}, moved: {}, newGames: [], taskText: {}
+  });
   const canHover = () => matchMedia("(hover: hover)").matches;
   const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------- Chat dùng chung (Firebase) ----------
+  // CHAT.provider: "" = tắt (nhận xét lưu trên máy người viết + email), "firebase" = chat thật,
+  // "local" = chat thử giữa các tab cùng trình duyệt (chỉ để thử giao diện).
+  const CHAT = DATA.chat || {};
+  // Chưa điền cấu hình Firebase thì coi như chưa bật chat, trang chạy ở chế độ nhận xét + email
+  const chatOn = !!CHAT.provider && (CHAT.provider !== "firebase" || !!(CHAT.firebase && CHAT.firebase.projectId));
+  const ROOM_KEY = "game-progress-room";
+  const OWNER_KEY = "game-progress-owner";
+  const CID_KEY = "game-progress-cid";
+  let room = "";
+  let myCid = "";
+  try {
+    const k = new URLSearchParams(location.search).get("k");
+    if (k && /^[A-Za-z0-9_-]{20,64}$/.test(k)) localStorage.setItem(ROOM_KEY, k);
+    room = localStorage.getItem(ROOM_KEY) || "";
+    myCid = localStorage.getItem(CID_KEY) || "";
+    if (!myCid) { myCid = "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem(CID_KEY, myCid); }
+  } catch (e) { myCid = myCid || "u" + Math.random().toString(36).slice(2, 12); }
+  const canComment = !chatOn || !!room; // bật chat mà không có link bí mật thì chỉ xem
+  const isOwner = () => { try { return localStorage.getItem(OWNER_KEY) === "1"; } catch (e) { return false; } };
+  let remote = [];      // tin nhắn từ máy chủ chat
+  let chatApi = null;   // adapter đã kết nối
+  let chatReady = false;
 
   // ---------- Trạng thái lưu trong trình duyệt ----------
   let state = load();
@@ -19,12 +48,48 @@
     } catch (e) {}
     return EMPTY();
   }
+  let warnedQuota = false;
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {
+      if (!warnedQuota) { warnedQuota = true; toast('Bộ nhớ trình duyệt đầy (thường do ảnh lớn). Hãy bấm "Lưu lên web" ngay.'); }
+    }
   }
+  const isDirty = () => {
+    const s = state;
+    return !!(s.delGames.length || s.delTasks.length || s.delComments.length || s.newGames.length ||
+      Object.keys(s.done).length || Object.keys(s.added).length || Object.keys(s.progress).length ||
+      Object.keys(s.comments).length || Object.keys(s.fields).length || Object.keys(s.links).length ||
+      Object.keys(s.images).length || Object.keys(s.moved).length || Object.keys(s.taskText).length);
+  };
+
+  // Dữ liệu gốc (như trong data.js) và dữ liệu hiệu lực = gốc + chỉnh sửa trực tiếp chưa lưu.
+  // DATA.sections luôn là dữ liệu hiệu lực để phần còn lại của mã dùng thẳng.
+  let BASE = { sections: JSON.parse(JSON.stringify(DATA.sections)) };
+  function rebuild() {
+    const secs = JSON.parse(JSON.stringify(BASE.sections));
+    state.newGames.forEach((n) => {
+      if (secs.some((s) => s.games.some((g) => g.id === n.game.id))) return;
+      (secs.find((s) => s.key === n.sec) || secs[0]).games.push(JSON.parse(JSON.stringify(n.game)));
+    });
+    Object.keys(state.moved).forEach((gid) => {
+      let game = null;
+      secs.forEach((s) => { const i = s.games.findIndex((g) => g.id === gid); if (i >= 0) game = s.games.splice(i, 1)[0]; });
+      if (game) (secs.find((s) => s.key === state.moved[gid]) || secs[0]).games.push(game);
+    });
+    secs.forEach((s) => s.games.forEach((g) => {
+      if (state.fields[g.id]) Object.assign(g, state.fields[g.id]);
+      if (state.links[g.id]) g.links = state.links[g.id].map((x) => Object.assign({}, x));
+      if (state.images[g.id]) g.images = state.images[g.id].map((x) => Object.assign({}, x));
+    }));
+    DATA.sections = secs;
+  }
+  rebuild();
 
   // ---------- Trạng thái giao diện ----------
-  const ui = { editing: false, collapsed: {}, drafts: {}, name: "", pop: null, incoming: null, annotating: false };
+  const ui = {
+    editing: false, collapsed: {}, drafts: {}, name: "", pop: null, incoming: null, annotating: false,
+    filter: { q: "", sec: "all", genre: "" }, dragging: ""
+  };
   try {
     if (/[?&]edit(=1|=true)?(&|$)/.test(location.search)) localStorage.setItem(MODE_KEY, "1");
     ui.editing = localStorage.getItem(MODE_KEY) === "1";
@@ -60,7 +125,7 @@
   const prog = (g) => (g.id in state.progress ? state.progress[g.id] : g.progress);
   const visibleGames = (sec) => sec.games.filter((g) => !state.delGames.includes(g.id));
   function allTasks(g) {
-    const base = g.tasks || [];
+    const base = (g.tasks || []).map((t) => (t.id in state.taskText ? Object.assign({}, t, { text: state.taskText[t.id] }) : t));
     const ids = new Set(base.map((t) => t.id));
     return base.concat((state.added[g.id] || []).filter((t) => !ids.has(t.id)));
   }
@@ -69,8 +134,13 @@
     const baseRaw = g.comments || [];
     const ids = new Set(baseRaw.map((c) => c.id));
     const base = baseRaw.filter((c) => !state.delComments.includes(c.id)).map((c) => Object.assign({}, c, { mine: false }));
-    const mine = (state.comments[g.id] || []).filter((c) => !ids.has(c.id)).map((c) => Object.assign({}, c, { mine: true }));
-    return base.concat(mine).sort((a, b) => new Date(a.time) - new Date(b.time));
+    const extra = chatOn ?
+      remote.filter((m) => m.gid === g.id && !ids.has(m.id)).map((m) => ({
+        id: m.id, author: m.author, text: m.text, time: new Date(m.ts).toISOString(), mine: m.cid === myCid, remote: true,
+        target: m.tid ? { id: m.tid, label: m.tlabel || "" } : undefined
+      })) :
+      (state.comments[g.id] || []).filter((c) => !ids.has(c.id)).map((c) => Object.assign({}, c, { mine: true }));
+    return base.concat(extra).sort((a, b) => new Date(a.time) - new Date(b.time));
   }
   function targetCounts(g) {
     const m = {};
@@ -93,12 +163,20 @@
   // Thuộc tính đánh dấu một phần giao diện có thể nhận xét
   function A(g, kind, label, cm) {
     const tid = "t-" + g.id + "-" + kind;
+    if (!canComment) return ' id="' + esc(tid) + '"'; // chưa có link bí mật: chỉ xem, không nhận xét
     return ' id="' + esc(tid) + '" data-annot data-target="' + esc(tid) + '" data-tlabel="' + esc(label) + '" data-game="' + esc(g.id) + '"' +
       (cm[tid] ? ' data-ccount="' + cm[tid] + '"' : "");
   }
 
   // ---------- Render từng phần ----------
   let introDone = false; // thanh tiến độ ở bảng đầu trang chỉ chạy hiệu ứng một lần
+
+  // Phần tử chữ sửa trực tiếp được ngay trên trang (chỉ dùng ở chế độ chỉnh sửa)
+  function ed(kind, id, field, text, tag, cls, multi, label, ph, extra) {
+    return "<" + tag + ' class="' + cls + ' editable" contenteditable="true" spellcheck="false" role="textbox"' + (multi ? ' aria-multiline="true"' : "") +
+      ' aria-label="' + esc(label) + '" data-edit="' + kind + '" data-id="' + esc(id) + '" data-field="' + esc(field) + '"' +
+      (ph ? ' data-ph="' + esc(ph) + '"' : "") + (extra || "") + ">" + esc(text) + "</" + tag + ">";
+  }
 
   function renderTask(t, g, cm) {
     const d = isDone(t);
@@ -107,9 +185,9 @@
       return '<li class="task' + (d ? " done" : "") + '"' + attrs + '><span class="mark" aria-hidden="true">' + (d ? "✓" : "") +
         '</span><span class="task-text">' + esc(t.text) + '</span><span class="sr-only">' + (d ? " (đã xong)" : " (chưa xong)") + "</span></li>";
     }
-    return '<li class="task' + (d ? " done" : "") + '"' + attrs + "><label>" +
-      '<input type="checkbox" data-action="toggle" data-fk="tg-' + esc(t.id) + '" data-id="' + esc(t.id) + '"' + (d ? " checked" : "") + ">" +
-      '<span class="task-text">' + esc(t.text) + "</span></label>" +
+    return '<li class="task' + (d ? " done" : "") + '"' + attrs + ">" +
+      '<input type="checkbox" class="task-check" data-action="toggle" data-fk="tg-' + esc(t.id) + '" data-id="' + esc(t.id) + '" aria-label="Đánh dấu xong: ' + esc(t.text) + '"' + (d ? " checked" : "") + ">" +
+      ed("task", t.id, "text", t.text, "span", "task-text", false, "Nội dung việc", "Nội dung việc") +
       '<button class="icon-btn" data-action="del-task" data-id="' + esc(t.id) + '" title="Xóa việc này" aria-label="Xóa việc: ' + esc(t.text) + '">✕</button></li>';
   }
 
@@ -121,20 +199,27 @@
       '<p class="bubble">' + esc(c.text) + "</p></li>";
   }
 
-  function renderComments(g) {
+  // Phần tiêu đề + danh sách tin nhắn của một game (tách riêng để cập nhật mà không đụng vào ô đang gõ)
+  function threadHtml(g) {
     const list = allComments(g);
+    return "<h4>" + (chatOn ? "Trao đổi" : "Nhận xét") + (list.length ? " (" + list.length + ")" : "") + "</h4>" +
+      (list.length ? '<ul class="thread">' + list.map((c) => renderMsg(g, c, true)).join("") + "</ul>" :
+        '<p class="no-comments">' + (canComment ? "Chưa có tin nhắn. Rê chuột vào ảnh, tiến độ hay một mục bất kỳ để nhận xét đúng chỗ, hoặc viết chung ở dưới." : "Chưa có nhận xét.") + "</p>") +
+      (!canComment ? '<p class="no-comments">Muốn nhận xét, hãy mở trang bằng link do người làm gửi cho bạn.</p>' : "");
+  }
+
+  function renderComments(g) {
     const draft = ui.drafts[g.id] || "";
     return '<section class="comments" id="c-' + esc(g.id) + '" aria-label="Nhận xét về ' + esc(g.name) + '">' +
-      "<h4>Nhận xét" + (list.length ? " (" + list.length + ")" : "") + "</h4>" +
-      (list.length ? '<ul class="thread">' + list.map((c) => renderMsg(g, c, true)).join("") + "</ul>" :
-        '<p class="no-comments">Chưa có nhận xét. Rê chuột vào ảnh, tiến độ hay một mục bất kỳ để nhận xét đúng chỗ, hoặc viết nhận xét chung ở dưới.</p>') +
-      '<form class="composer" data-game="' + esc(g.id) + '">' +
+      '<div class="thread-wrap">' + threadHtml(g) + "</div>" +
+      (!canComment ? "</section>" : "") +
+      (!canComment ? "" : '<form class="composer" data-game="' + esc(g.id) + '">' +
       '<label class="sr-only" for="cn-' + esc(g.id) + '">Tên của bạn</label>' +
       '<input id="cn-' + esc(g.id) + '" name="author" type="text" maxlength="40" placeholder="Tên của bạn" autocomplete="name" data-fk="cn-' + esc(g.id) + '" value="' + esc(ui.name) + '" required>' +
       '<label class="sr-only" for="ct-' + esc(g.id) + '">Nội dung nhận xét</label>' +
       '<textarea id="ct-' + esc(g.id) + '" name="text" rows="2" maxlength="600" placeholder="Nhận xét chung về ' + esc(g.name) + '" data-draft="' + esc(g.id) + '" data-fk="ct-' + esc(g.id) + '" required>' + esc(draft) + "</textarea>" +
-      '<div class="composer-foot"><span class="hint kbd">Ctrl + Enter để gửi</span><button class="btn small" type="submit">Thêm nhận xét</button></div>' +
-      "</form></section>";
+      '<div class="composer-foot"><span class="hint kbd">Ctrl + Enter để gửi</span><button class="btn small" type="submit">' + (chatOn ? "Gửi" : "Thêm nhận xét") + "</button></div>" +
+      "</form></section>");
   }
 
   function renderGame(sec, g) {
@@ -146,8 +231,11 @@
     const nCmt = allComments(g).length;
     const open = !ui.collapsed[g.id];
 
-    const facts = '<span class="genre">' + esc(g.genre) + "</span><span>" + esc(g.platform) + "</span>" +
-      (g.meta ? "<span>" + esc(g.meta) + "</span>" : "");
+    const facts = ui.editing ?
+      ed("game", g.id, "genre", g.genre, "span", "genre", false, "Thể loại", "Thể loại") +
+      ed("game", g.id, "platform", g.platform, "span", "", false, "Nền tảng", "Nền tảng") +
+      ed("game", g.id, "meta", g.meta || "", "span", "", false, "Ghi chú, ví dụ: Dự kiến ra mắt 02/2027", "Ghi chú (ví dụ: ra mắt 02/2027)") :
+      '<span class="genre">' + esc(g.genre) + "</span><span>" + esc(g.platform) + "</span>" + (g.meta ? "<span>" + esc(g.meta) + "</span>" : "");
 
     const progress = planned ? "" :
       '<div class="progress"' + A(g, "progress", "Tiến độ", cm) + '><div class="progress-top"><span>Tiến độ</span><b>' + p + "%</b></div>" +
@@ -156,14 +244,17 @@
       "</div>";
 
     const imgs = g.images || [];
-    const gallery = imgs.length ?
+    const gallery = (imgs.length || ui.editing) ?
       '<div class="gallery-wrap">' +
       '<button class="nav-btn prev" data-action="scroll" data-dir="-1" aria-label="Ảnh trước">‹</button>' +
       (imgs.length > 1 ? '<span class="gcount" aria-hidden="true">1 / ' + imgs.length + "</span>" : "") +
       '<div class="gallery" tabindex="0" role="group" aria-label="Ảnh của ' + esc(g.name) + '">' +
       imgs.map((im, i) =>
-        "<figure" + A(g, "img-" + (i + 1), "Ảnh " + (i + 1) + (im.caption ? ": " + im.caption : ""), cm) + '><img loading="lazy" src="' + esc(im.src) + '" alt="' + esc(im.caption || g.name) + '" data-action="zoom" data-game="' + esc(g.id) + '" data-index="' + i + '">' +
-        "<figcaption>" + esc(im.caption || "") + "</figcaption></figure>").join("") +
+        "<figure" + A(g, "img-" + (i + 1), "Ảnh " + (i + 1) + (im.caption ? ": " + im.caption : ""), cm) + '><div class="imgbox"><img loading="lazy" src="' + esc(im.src) + '" alt="' + esc(im.caption || g.name) + '" data-action="zoom" data-game="' + esc(g.id) + '" data-index="' + i + '">' +
+        (ui.editing ? '<div class="img-tools"><button type="button" class="img-btn" data-action="img-replace" data-game="' + esc(g.id) + '" data-index="' + i + '">Thay ảnh</button>' +
+          '<button type="button" class="img-btn danger" data-action="img-del" data-game="' + esc(g.id) + '" data-index="' + i + '">Xóa</button></div>' : "") +
+        "</div><figcaption>" + (ui.editing ? ed("cap", g.id, String(i), im.caption || "", "span", "", false, "Chú thích ảnh", "Chú thích ảnh") : esc(im.caption || "")) + "</figcaption></figure>").join("") +
+      (ui.editing ? '<figure class="add-img"><button type="button" class="add-img-btn" data-action="img-add" data-game="' + esc(g.id) + '">+ Thêm ảnh</button></figure>' : "") +
       "</div>" +
       '<button class="nav-btn next" data-action="scroll" data-dir="1" aria-label="Ảnh sau">›</button></div>' : "";
 
@@ -173,32 +264,102 @@
       '<button class="btn small" type="submit">Thêm</button></form>' : "";
 
     const links = g.links || [];
-    const linkHtml = links.length ?
-      '<ul class="links">' + links.map((l, i) => "<li" + A(g, "link-" + (i + 1), "Tài liệu: " + short(l.title, 48), cm) + '><a href="' + esc(safeUrl(l.url)) + '" target="_blank" rel="noopener noreferrer">' + esc(l.title) + "</a></li>").join("") + "</ul>" :
-      '<p class="none">Chưa có tài liệu.</p>';
+    const linkHtml = ui.editing ?
+      (links.length ? '<ul class="links edit-links">' + links.map((l, i) => "<li" + A(g, "link-" + (i + 1), "Tài liệu: " + short(l.title, 48), cm) + '><div class="link-edit">' +
+        '<input type="text" class="le" data-action="link-edit" data-k="title" data-game="' + esc(g.id) + '" data-index="' + i + '" value="' + esc(l.title) + '" placeholder="Tên tài liệu" aria-label="Tên tài liệu" maxlength="120">' +
+        '<input type="url" class="le" data-action="link-edit" data-k="url" data-game="' + esc(g.id) + '" data-index="' + i + '" value="' + esc(l.url) + '" placeholder="https://..." aria-label="Địa chỉ tài liệu" maxlength="500">' +
+        '<button class="icon-btn" data-action="link-del" data-game="' + esc(g.id) + '" data-index="' + i + '" aria-label="Xóa tài liệu ' + esc(l.title) + '">✕</button></div></li>').join("") + "</ul>" : '<p class="none">Chưa có tài liệu.</p>') +
+      '<button type="button" class="btn small ghost add-link" data-action="link-add" data-game="' + esc(g.id) + '">+ Thêm tài liệu</button>' :
+      (links.length ?
+        '<ul class="links">' + links.map((l, i) => "<li" + A(g, "link-" + (i + 1), "Tài liệu: " + short(l.title, 48), cm) + '><a href="' + esc(safeUrl(l.url)) + '" target="_blank" rel="noopener noreferrer">' + esc(l.title) + "</a></li>").join("") + "</ul>" :
+        '<p class="none">Chưa có tài liệu.</p>');
 
     const tools =
       '<a class="tool' + (nCmt ? " has-count" : "") + '" href="#c-' + esc(g.id) + '" data-action="goto-comments" data-id="' + esc(g.id) + '" aria-label="Nhận xét: ' + nCmt + '">' + ICON_CMT + "<span>" + nCmt + "</span></a>" +
       '<button class="tool" data-action="collapse" data-id="' + esc(g.id) + '" aria-expanded="' + open + '" aria-controls="m-' + esc(g.id) + '">' + '<span class="tool-label">' + (open ? "Thu gọn" : "Mở rộng") + "</span>" + ICON_CHEV + "</button>" +
       (ui.editing ? '<button class="icon-btn" data-action="del-game" data-id="' + esc(g.id) + '" title="Xóa game này" aria-label="Xóa game ' + esc(g.name) + '">✕</button>' : "");
 
-    return '<article class="game" id="g-' + esc(g.id) + '">' +
-      '<div class="game-head"><div class="game-title"' + A(g, "title", "Thông tin game", cm) + '><h3 tabindex="-1">' + esc(g.name) + '</h3><div class="facts">' + facts + '</div></div><div class="game-tools">' + tools + "</div></div>" +
+    // Chế độ sửa: tay nắm kéo + ô chọn mục ở đầu mỗi game để chuyển sang mục khác
+    const mover = ui.editing ?
+      '<div class="mover"><span class="drag-handle" draggable="true" data-drag="' + esc(g.id) + '" title="Kéo sang mục khác" aria-hidden="true">⠿ Kéo</span>' +
+      '<label class="move-label"><span class="sr-only">Chuyển ' + esc(g.name) + ' sang mục</span><select class="move-sel" data-action="move" data-id="' + esc(g.id) + '">' +
+      DATA.sections.map((s) => '<option value="' + esc(s.key) + '"' + (s.key === sec.key ? " selected" : "") + ">" + esc(s.title) + "</option>").join("") +
+      "</select></label></div>" : "";
+
+    const titleHtml = ui.editing ? ed("game", g.id, "name", g.name, "h3", "", false, "Tên game", "Tên game", ' tabindex="-1"') : '<h3 tabindex="-1">' + esc(g.name) + "</h3>";
+    const descHtml = ui.editing ?
+      ed("game", g.id, "description", g.description, "p", "desc", true, "Mô tả game", "Mô tả game", A(g, "desc", "Mô tả", cm)) :
+      '<p class="desc"' + A(g, "desc", "Mô tả", cm) + ">" + esc(g.description) + "</p>";
+
+    return '<article class="game" id="g-' + esc(g.id) + '">' + mover +
+      '<div class="game-head"><div class="game-title"' + A(g, "title", "Thông tin game", cm) + ">" + titleHtml + '<div class="facts">' + facts + '</div></div><div class="game-tools">' + tools + "</div></div>" +
       progress +
       '<div class="game-more" id="m-' + esc(g.id) + '"' + (open ? "" : " hidden") + ">" + gallery +
-      '<div class="game-body"><p class="desc"' + A(g, "desc", "Mô tả", cm) + ">" + esc(g.description) + "</p>" +
+      '<div class="game-body">' + descHtml +
       '<div class="cols"><div><h4>Việc cần làm, xong ' + doneCount + "/" + tasks.length + "</h4>" + taskHtml + addForm + "</div>" +
       "<div><h4>Tài liệu tham khảo</h4>" + linkHtml + "</div></div>" + renderComments(g) + "</div></div></article>";
   }
 
+  // ---------- Bộ lọc ----------
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
+  function passes(sec, g) {
+    const f = ui.filter;
+    if (f.genre && g.genre !== f.genre) return false;
+    if (f.q) {
+      const hay = norm([g.name, g.genre, g.platform, g.meta, g.description].join(" "));
+      if (!f.q.split(/\s+/).every((w) => hay.includes(norm(w)))) return false;
+    }
+    return true;
+  }
+  const filterActive = () => !!(ui.filter.q || ui.filter.genre || ui.filter.sec !== "all");
+  function renderFilterBar(shown, total) {
+    const f = ui.filter;
+    $("f-sec").innerHTML = [{ key: "all", title: "Tất cả" }].concat(DATA.sections).map((s) =>
+      '<button type="button" class="seg-btn' + (f.sec === s.key ? " on" : "") + '" data-sec="' + esc(s.key) + '" aria-pressed="' + (f.sec === s.key) + '">' + esc(s.title) + "</button>").join("");
+    const genres = Array.from(new Set(DATA.sections.reduce((a, s) => a.concat(visibleGames(s).map((g) => g.genre)), []).filter(Boolean))).sort();
+    const sel = $("f-genre");
+    const key = genres.join("|");
+    if (sel.getAttribute("data-key") !== key) {
+      sel.innerHTML = '<option value="">Mọi thể loại</option>' + genres.map((x) => '<option value="' + esc(x) + '">' + esc(x) + "</option>").join("");
+      sel.setAttribute("data-key", key);
+    }
+    sel.value = genres.includes(f.genre) ? f.genre : "";
+    $("f-count").textContent = filterActive() ? "Hiện " + shown + "/" + total + " game" : total + " game";
+    $("f-clear").hidden = !filterActive();
+  }
+
+  // ---------- Bảng tổng quan đầu trang ----------
+  function renderBoard() {
+    let html = "";
+    DATA.sections.forEach((sec) => {
+      const games = visibleGames(sec);
+      html += '<div class="lane" data-key="' + esc(sec.key) + '"><div class="lane-label"><b>' + esc(sec.title) + "</b><span>" + games.length + " game</span></div>" +
+        (games.length ? '<div class="chips">' + games.map((g) => {
+          const sub = sec.key === "dev" ?
+            '<span class="chip-sub">' + prog(g) + '% hoàn thành</span><span class="chip-bar"><i style="--w:' + prog(g) + '%"></i></span>' :
+            '<span class="chip-sub">' + esc(g.meta || g.genre) + "</span>";
+          return '<a class="chip" href="#g-' + esc(g.id) + '" data-game="' + esc(g.id) + '"><span class="chip-name">' + esc(g.name) + "</span>" + sub + "</a>";
+        }).join("") + "</div>" : '<p class="lane-empty">Chưa có game nào.</p>') + "</div>";
+    });
+    const board = $("board");
+    board.innerHTML = html;
+    board.classList.toggle("intro", !introDone);
+    introDone = true;
+  }
+
   function render() {
+    rebuild();
     $("title").textContent = DATA.title;
     document.title = DATA.title;
     $("updated").textContent = DATA.updated || "";
     document.body.classList.toggle("editing", ui.editing);
     document.body.classList.toggle("annotating", ui.annotating);
     $("editbar").hidden = !ui.editing;
-    $("enter-edit").hidden = ui.editing;
+    $("dirty").hidden = !isDirty();
+    const modeBtn = $("enter-edit");
+    modeBtn.textContent = ui.editing ? "Xong chỉnh sửa" : "Chỉnh sửa";
+    modeBtn.setAttribute("aria-pressed", String(ui.editing));
+    modeBtn.classList.toggle("on", ui.editing);
 
     // nhớ vị trí cuộn, ô đang focus, vị trí cuộn của dải ảnh
     const y = window.scrollY;
@@ -211,28 +372,34 @@
       if (gl) scrolls[el.id] = gl.scrollLeft;
     });
 
-    let boardHtml = "", appHtml = "", tabsHtml = "";
+    let appHtml = "", tabsHtml = "", shown = 0, total = 0;
     DATA.sections.forEach((sec) => {
-      const games = visibleGames(sec);
-      boardHtml += '<div class="lane" data-key="' + esc(sec.key) + '"><div class="lane-label"><b>' + esc(sec.title) + "</b><span>" + games.length + " game</span></div>" +
-        (games.length ? '<div class="chips">' + games.map((g) => {
-          const sub = sec.key === "dev" ?
-            '<span class="chip-sub">' + prog(g) + '% hoàn thành</span><span class="chip-bar"><i style="--w:' + prog(g) + '%"></i></span>' :
-            '<span class="chip-sub">' + esc(g.meta || g.genre) + "</span>";
-          return '<a class="chip" href="#g-' + esc(g.id) + '" data-game="' + esc(g.id) + '"><span class="chip-name">' + esc(g.name) + "</span>" + sub + "</a>";
-        }).join("") + "</div>" : '<p class="lane-empty">Chưa có game nào.</p>') + "</div>";
+      const all = visibleGames(sec);
+      const games = all.filter((g) => passes(sec, g));
+      total += all.length;
+      const secOk = ui.filter.sec === "all" || ui.filter.sec === sec.key;
+      if (secOk) shown += games.length;
+      // Khi sửa luôn hiện đủ các mục để làm chỗ thả; khi xem thì ẩn mục không khớp bộ lọc
+      const hide = !ui.editing && (!secOk || (filterActive() && !games.length));
+      if (hide) return;
+      const list = secOk ? games : [];
+      const filtered = list.length !== all.length;
       tabsHtml += '<a href="#sec-' + esc(sec.key) + '" data-key="' + esc(sec.key) + '"><span class="dot"></span>' + esc(sec.title) + "</a>";
-      appHtml += '<section class="section" id="sec-' + esc(sec.key) + '" data-key="' + esc(sec.key) + '"><div class="section-head"><h2>' + esc(sec.title) + '</h2><span class="count">' + games.length + "</span>" +
+      appHtml += '<section class="section" id="sec-' + esc(sec.key) + '" data-key="' + esc(sec.key) + '"><div class="section-head"><h2>' + esc(sec.title) + '</h2><span class="count">' +
+        (filtered ? list.length + "/" + all.length : all.length) + "</span>" +
         (sec.note ? '<span class="note">' + esc(sec.note) + "</span>" : "") + "</div>" +
-        (games.length ? games.map((g) => renderGame(sec, g)).join("") : '<div class="empty">Chưa có game nào trong mục này.</div>') + "</section>";
+        (ui.editing ? '<div class="drop-hint" aria-hidden="true">Thả vào đây để chuyển sang "' + esc(sec.title) + '"</div>' : "") +
+        (list.length ? list.map((g) => renderGame(sec, g)).join("") :
+          '<div class="empty">' + (all.length ? "Không có game nào khớp bộ lọc." : "Chưa có game nào trong mục này.") + "</div>") +
+        (ui.editing ? '<button type="button" class="btn ghost add-game" data-action="add-game" data-sec="' + esc(sec.key) + '">+ Thêm game vào "' + esc(sec.title) + '"</button>' : "") +
+        "</section>";
     });
+    if (!appHtml) appHtml = '<div class="empty">Không có game nào khớp bộ lọc.</div>';
     tabsHtml += '<button type="button" data-action="toggle-all" id="toggle-all"></button>' +
-      '<button type="button" class="touch-only' + (ui.annotating ? " on" : "") + '" data-action="annot-mode" aria-pressed="' + ui.annotating + '">Nhận xét</button>';
+      (canComment ? '<button type="button" class="touch-only' + (ui.annotating ? " on" : "") + '" data-action="annot-mode" aria-pressed="' + ui.annotating + '">Nhận xét</button>' : "");
 
-    const board = $("board");
-    board.innerHTML = boardHtml;
-    board.classList.toggle("intro", !introDone);
-    introDone = true;
+    renderBoard();
+    renderFilterBar(shown, total);
     $("tabs").innerHTML = tabsHtml;
     $("app").innerHTML = appHtml;
 
@@ -293,7 +460,9 @@
   window.addEventListener("scroll", () => {
     if (!spyQueued) { spyQueued = true; requestAnimationFrame(updateSpy); }
     if (hoverEl && !chip.hidden) placeChip(hoverEl);
+    $("to-top").hidden = window.scrollY < 500; // nút cuộn lên đầu trang chỉ hiện khi đã cuộn xuống
   }, { passive: true });
+  $("to-top").addEventListener("click", () => window.scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" }));
 
   // đếm ảnh "2 / 4" khi cuộn dải ảnh
   document.addEventListener("scroll", (e) => {
@@ -353,6 +522,16 @@
     toast("Đã xóa việc", () => { state.delTasks = state.delTasks.filter((x) => x !== id); save(); render(); });
   }
   function deleteComment(gid, id) {
+    if (chatOn) {
+      const m = remote.find((x) => x.id === id);
+      if (m && chatApi && (m.cid === myCid || ui.editing)) {
+        const backup = Object.assign({}, m);
+        chatApi.remove(id).then(() => {
+          toast("Đã xóa tin nhắn", () => { chatApi.restore(backup).catch(() => toast("Không khôi phục được tin nhắn")); });
+        }).catch(() => toast("Không xóa được tin nhắn"));
+        return;
+      }
+    }
     const mineList = state.comments[gid] || [];
     const idx = mineList.findIndex((c) => c.id === id);
     if (idx >= 0) {
@@ -372,7 +551,7 @@
 
   function placeChip(el) {
     const r = el.getBoundingClientRect();
-    const navH = $("tabs").offsetHeight || 0;
+    const navH = $("topbar").offsetHeight || 0;
     if (r.bottom < navH + 24 || r.top > innerHeight - 24) { chip.hidden = true; return; }
     chip.hidden = false;
     const cw = chip.offsetWidth, ch = chip.offsetHeight;
@@ -387,6 +566,7 @@
   }
   function showChip(el) {
     clearTimeout(hideT);
+    if (ui.editing) return; // đang sửa: không hiện nút nhận xét để khỏi vướng
     if (ui.pop && ui.pop.id === el.id) { chip.hidden = true; return; } // đang mở bong bóng cho phần này
     if (hoverEl && hoverEl !== el) hoverEl.classList.remove("annot-hover");
     hoverEl = el;
@@ -425,22 +605,25 @@
       if (el) el.classList.add("annot-active");
     }
   }
-  function renderPop() {
-    const p = ui.pop;
-    if (!p) { popEl.hidden = true; return; }
-    const g = findGame(p.gid);
-    if (!g) { ui.pop = null; popEl.hidden = true; return; }
+  function popThreadHtml(g, p) {
     const list = allComments(g).filter((c) => c.target && c.target.id === p.id);
     let items = list.map((c) => renderMsg(g, c, false)).join("");
     if (ui.incoming && ui.incoming.tid === p.id) {
       items += '<li class="msg from-link"><div class="msg-meta"><b>' + esc(ui.incoming.a || "Người nhận xét") + "</b><time>" + esc(fmtTime(ui.incoming.t)) +
         '</time><span class="badge">từ link email</span></div><p class="bubble">' + esc(ui.incoming.m) + "</p></li>";
     }
+    return items ? '<ul class="thread pop-thread">' + items + "</ul>" : "";
+  }
+  function renderPop() {
+    const p = ui.pop;
+    if (!p) { popEl.hidden = true; return; }
+    const g = findGame(p.gid);
+    if (!g) { ui.pop = null; popEl.hidden = true; return; }
     const key = "pop:" + p.id;
     popEl.innerHTML =
       '<div class="pop-head"><div><span class="kicker">Nhận xét về</span><strong>' + esc(p.label) + '</strong></div>' +
       '<button class="icon-btn" data-action="pop-close" aria-label="Đóng">✕</button></div>' +
-      (items ? '<ul class="thread pop-thread">' + items + "</ul>" : "") +
+      '<div class="pop-thread-wrap">' + popThreadHtml(g, p) + "</div>" +
       '<form class="composer pop-form" data-game="' + esc(p.gid) + '" data-target="' + esc(p.id) + '" data-tlabel="' + esc(p.label) + '">' +
       '<label class="sr-only" for="pn">Tên của bạn</label>' +
       '<input id="pn" name="author" type="text" maxlength="40" placeholder="Tên của bạn" autocomplete="name" data-fk="pop-n" value="' + esc(ui.name) + '" required>' +
@@ -459,7 +642,7 @@
     // ưu tiên đặt bong bóng bên dưới, rồi bên trên, rồi bên cạnh để không che phần đang được nhận xét
     const w = Math.min(360, innerWidth - 16);
     popEl.style.width = w + "px";
-    const navH = $("tabs").offsetHeight || 0;
+    const navH = $("topbar").offsetHeight || 0;
     const h = popEl.offsetHeight, gap = 10;
     const clampL = (x) => Math.max(8, Math.min(x, innerWidth - w - 8));
     const sideTop = () => Math.max(navH + 8, Math.min(rect.top, innerHeight - h - 8));
@@ -543,6 +726,9 @@
   function linkFor(g, c) {
     const base = pageUrl();
     if (!c.target) return base + "#c-" + g.id;
+    // Chat thật: nội dung nằm trên máy chủ chat. Không đưa mã bí mật vào email; bạn mở link trên
+    // trình duyệt đã từng vào bằng link có mã (trình duyệt nhớ mã).
+    if (chatOn) return base + "#" + c.target.id;
     const payload = encodeURIComponent(JSON.stringify({ a: c.author, m: c.text.slice(0, 400), t: c.time }));
     return base + "?cm=" + payload + "#" + c.target.id;
   }
@@ -607,6 +793,21 @@
   function addComment(g, author, text, target, draftKey) {
     ui.name = author;
     try { localStorage.setItem(NAME_KEY, author); } catch (err) {}
+    if (chatOn) { // chat thật: gửi lên máy chủ, tin hiện ngay cho cả hai bên
+      if (!chatApi) { toast("Chưa kết nối được chat, thử lại sau ít giây."); return; }
+      const m = { gid: g.id, author: author, text: text, ts: Date.now(), cid: myCid };
+      if (target) { m.tid = target.id; m.tlabel = target.label; }
+      ui.drafts[draftKey] = "";
+      render();
+      chatApi.add(m).then(() => {
+        if (!ui.editing && !isOwner() && notifyConfigured()) { // người xem nhắn → báo email cho chủ trang
+          const c = { author: author, text: text, time: new Date(m.ts).toISOString() };
+          if (target) c.target = target;
+          postNotify(subjectFor(g, c), buildFeedback([{ g: g, c: c }]), author).catch(() => {});
+        }
+      }).catch(() => toast("Không gửi được tin nhắn. Kiểm tra mạng rồi thử lại."));
+      return;
+    }
     const c = { id: uid("c-"), author: author, text: text, time: new Date().toISOString() };
     if (target) c.target = target;
     (state.comments[g.id] = state.comments[g.id] || []).push(c);
@@ -680,11 +881,14 @@
   // ---------- Chế độ xem / chỉnh sửa ----------
   function setEditing(on) {
     ui.editing = on;
-    try { localStorage.setItem(MODE_KEY, on ? "1" : "0"); } catch (e) {}
+    try {
+      localStorage.setItem(MODE_KEY, on ? "1" : "0");
+      if (on) localStorage.setItem(OWNER_KEY, "1"); // máy này là của chủ trang: không tự gửi email cho chính mình
+    } catch (e) {}
     render();
     toast(on ? "Đã bật chế độ chỉnh sửa" : "Đã chuyển sang chế độ xem");
   }
-  $("enter-edit").addEventListener("click", () => setEditing(true));
+  $("enter-edit").addEventListener("click", () => setEditing(!ui.editing));
   $("exit-edit").addEventListener("click", () => setEditing(false));
   $("send").addEventListener("click", sendFeedback);
 
@@ -808,16 +1012,14 @@
 
   // ---------- Khôi phục & xuất dữ liệu ----------
   $("reset").addEventListener("click", () => {
-    const s = state;
-    const dirty = s.delGames.length || s.delTasks.length || s.delComments.length || Object.keys(s.done).length ||
-      Object.keys(s.added).length || Object.keys(s.progress).length || Object.keys(s.comments).length;
-    if (!dirty) { toast("Không có gì để khôi phục"); return; }
-    if (confirm("Khôi phục về đúng như trong data.js? Mọi thay đổi, việc và nhận xét đã thêm trên trình duyệt này sẽ mất.")) {
+    if (!isDirty()) { toast("Không có gì để khôi phục"); return; }
+    if (confirm("Bỏ mọi thay đổi chưa lưu lên web (chữ, ảnh, game, việc, nhận xét) trên trình duyệt này?")) {
       state = EMPTY();
       save(); render(); toast("Đã khôi phục");
     }
   });
-  $("export").addEventListener("click", () => {
+  // Dữ liệu đầy đủ sau mọi chỉnh sửa (dùng cho "Lưu lên web" và "Sao chép dữ liệu")
+  function buildExport() {
     const out = JSON.parse(JSON.stringify(DATA));
     const d = new Date();
     out.updated = pad(d.getDate()) + "/" + pad(d.getMonth() + 1) + "/" + d.getFullYear();
@@ -826,17 +1028,423 @@
       sec.games.forEach((g) => {
         g.progress = prog(g);
         g.tasks = visibleTasks(g).map((t) => ({ id: t.id, text: t.text, done: isDone(t) }));
-        g.comments = allComments(g).map((c) => {
+        // tin chat nằm trên Firebase nên không ghi vào data.js
+        g.comments = allComments(g).filter((c) => !c.remote).map((c) => {
           const o = { id: c.id, author: c.author, text: c.text, time: c.time };
           if (c.target) o.target = { id: c.target.id, label: c.target.label };
           return o;
         });
       });
     });
+    return out;
+  }
+  $("export").addEventListener("click", () => {
+    const out = buildExport();
+    let pending = 0;
+    out.sections.forEach((sec) => sec.games.forEach((g) => (g.images || []).forEach((im) => {
+      if (im.pending) { pending++; im.src = "images/" + im.pending; delete im.pending; }
+    })));
     copyText("window.PROGRESS = " + JSON.stringify(out, null, 2) + ";\n", (ok) =>
-      toast(ok ? "Đã sao chép. Dán đè vào data.js" : "Không sao chép được"));
+      toast(!ok ? "Không sao chép được" : pending ? "Đã sao chép, nhưng " + pending + " ảnh mới chưa có file. Hãy dùng Lưu lên web." : "Đã sao chép. Dán đè vào data.js"));
   });
+
+  // ---------- Bộ lọc: nối sự kiện ----------
+  let filterTimer = null;
+  $("f-q").addEventListener("input", (e) => {
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => { ui.filter.q = e.target.value.trim(); render(); }, 150);
+  });
+  $("f-genre").addEventListener("change", (e) => { ui.filter.genre = e.target.value; render(); });
+  $("f-sec").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-sec]");
+    if (b) { ui.filter.sec = b.getAttribute("data-sec"); render(); }
+  });
+  $("f-clear").addEventListener("click", () => {
+    ui.filter = { q: "", sec: "all", genre: "" };
+    $("f-q").value = "";
+    render();
+  });
+
+  // ---------- Sửa trực tiếp trên trang ----------
+  const EDITABLE = '[contenteditable="true"][data-edit]';
+  const imagesOf = (g) => (g.images || []).map((x) => Object.assign({}, x));
+  const linksOf = (g) => (g.links || []).map((x) => Object.assign({}, x));
+  const sectionOf = (gid) => DATA.sections.find((s) => s.games.some((g) => g.id === gid));
+
+  function commitEdit(el) {
+    const kind = el.getAttribute("data-edit"), id = el.getAttribute("data-id"), field = el.getAttribute("data-field");
+    const text = el.innerText.replace(/ /g, " ").trim();
+    if (kind === "game") {
+      const g = findGame(id);
+      if (!g || text === String(g[field] || "")) return;
+      if (!text && (field === "name" || field === "description")) { el.textContent = g[field]; toast("Mục này không được để trống"); return; }
+      (state.fields[id] = state.fields[id] || {})[field] = text;
+    } else if (kind === "task") {
+      const t = findTask(id);
+      if (!t || text === t.text) return;
+      if (!text) { el.textContent = t.text; toast("Nội dung việc không được để trống"); return; }
+      let inAdded = false; // việc thêm mới nằm trong state.added, việc gốc thì ghi đè bằng state.taskText
+      Object.keys(state.added).forEach((gid) => state.added[gid].forEach((x) => { if (x.id === id) { x.text = text; inAdded = true; } }));
+      if (!inAdded) state.taskText[id] = text;
+    } else if (kind === "cap") {
+      const g = findGame(id), i = Number(field);
+      if (!g || !g.images[i] || text === (g.images[i].caption || "")) return;
+      const arr = imagesOf(g);
+      arr[i].caption = text;
+      state.images[id] = arr;
+    } else return;
+    save();
+    rebuild();
+    renderBoard(); // chỉ làm mới bảng đầu trang, không vẽ lại cả trang để khỏi cướp focus ô khác
+    $("dirty").hidden = false;
+  }
+  document.addEventListener("focusout", (e) => { if (e.target.matches && e.target.matches(EDITABLE)) commitEdit(e.target); });
+  document.addEventListener("keydown", (e) => {
+    if (!e.target.matches || !e.target.matches(EDITABLE)) return;
+    if (e.key === "Enter" && e.target.getAttribute("aria-multiline") !== "true") { e.preventDefault(); e.target.blur(); }
+  });
+  document.addEventListener("paste", (e) => { // dán chữ thuần, bỏ định dạng
+    if (!e.target.matches || !e.target.matches(EDITABLE)) return;
+    e.preventDefault();
+    const t = (e.clipboardData || window.clipboardData).getData("text/plain");
+    document.execCommand("insertText", false, e.target.getAttribute("aria-multiline") === "true" ? t : t.replace(/\s*\n\s*/g, " "));
+  });
+
+  // Tài liệu tham khảo
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (!el.matches || !el.matches('[data-action="link-edit"]')) return;
+    const g = findGame(el.getAttribute("data-game"));
+    const arr = g && linksOf(g), i = Number(el.getAttribute("data-index"));
+    if (!arr || !arr[i]) return;
+    arr[i][el.getAttribute("data-k")] = el.value.trim();
+    state.links[g.id] = arr;
+    save(); rebuild(); $("dirty").hidden = false;
+  });
+
+  // Ảnh: đọc file, thu nhỏ còn tối đa 1280px, nén JPEG để nhẹ rồi giữ tạm cho tới khi Lưu lên web
+  function processImage(file, gid) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const r = Math.min(1, 1280 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * r));
+        c.height = Math.max(1, Math.round(img.height * r));
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        resolve({ dataUrl: c.toDataURL("image/jpeg", 0.82), name: gid + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + ".jpg" });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Không đọc được ảnh")); };
+      img.src = url;
+    });
+  }
+  function pickImage(gid, index) {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      processImage(f, gid).then((res) => {
+        const g = findGame(gid);
+        if (!g) return;
+        const arr = imagesOf(g);
+        const old = index >= 0 ? arr[index] : null;
+        const item = { src: res.dataUrl, caption: old ? old.caption || "" : "", pending: res.name };
+        if (old) arr[index] = item; else arr.push(item);
+        state.images[gid] = arr;
+        save(); render();
+        toast(old ? "Đã thay ảnh. Bấm Lưu lên web để áp dụng." : "Đã thêm ảnh. Bấm Lưu lên web để áp dụng.");
+      }).catch(() => toast("Không đọc được file ảnh này."));
+    };
+    inp.click();
+  }
+
+  // Chuyển game sang mục khác (kéo thả hoặc chọn từ danh sách)
+  function moveGame(gid, key) {
+    const from = sectionOf(gid), g = findGame(gid);
+    if (!from || !g || from.key === key) return;
+    const prevMoved = state.moved[gid], prevProg = state.progress[gid], p = prog(g);
+    state.moved[gid] = key;
+    if (key === "done") state.progress[gid] = 100;
+    else if (key === "planned") state.progress[gid] = 0;
+    else if (p >= 100) state.progress[gid] = 90;
+    else if (p <= 0) state.progress[gid] = 10;
+    save(); render();
+    const to = DATA.sections.find((s) => s.key === key);
+    toast('Đã chuyển "' + g.name + '" sang "' + (to ? to.title : key) + '"', () => {
+      if (prevMoved === undefined) delete state.moved[gid]; else state.moved[gid] = prevMoved;
+      if (prevProg === undefined) delete state.progress[gid]; else state.progress[gid] = prevProg;
+      save(); render();
+    });
+    requestAnimationFrame(() => { const c = $("g-" + gid); if (c) c.scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" }); });
+  }
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (el.matches && el.matches('[data-action="move"]') && ui.editing) moveGame(el.getAttribute("data-id"), el.value);
+  });
+  document.addEventListener("dragstart", (e) => {
+    const h = e.target.closest && e.target.closest("[data-drag]");
+    if (!h || !ui.editing) return;
+    ui.dragging = h.getAttribute("data-drag");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", ui.dragging);
+    const card = h.closest(".game");
+    if (card && e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(card, 24, 24);
+    document.body.classList.add("dragging");
+    if (card) card.classList.add("drag-src");
+  });
+  const endDrag = () => {
+    ui.dragging = "";
+    document.body.classList.remove("dragging");
+    document.querySelectorAll(".drop-hover, .drag-src").forEach((el) => el.classList.remove("drop-hover", "drag-src"));
+  };
+  document.addEventListener("dragend", endDrag);
+  document.addEventListener("dragover", (e) => {
+    if (!ui.dragging) return;
+    const s = e.target.closest && e.target.closest(".section");
+    if (!s) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    document.querySelectorAll(".section.drop-hover").forEach((x) => { if (x !== s) x.classList.remove("drop-hover"); });
+    s.classList.add("drop-hover");
+  });
+  document.addEventListener("drop", (e) => {
+    if (!ui.dragging) return;
+    const s = e.target.closest && e.target.closest(".section");
+    if (!s) return;
+    e.preventDefault();
+    const gid = ui.dragging;
+    endDrag();
+    moveGame(gid, s.getAttribute("data-key"));
+  });
+
+  function addGame(secKey) {
+    const id = "g" + Date.now().toString(36);
+    state.newGames.push({ sec: secKey, game: {
+      id: id, name: "Game mới", genre: "Thể loại", platform: "Nền tảng", progress: secKey === "done" ? 100 : 0, meta: "",
+      description: "Mô tả ngắn về game…", images: [], tasks: [], links: [], comments: []
+    } });
+    save(); render();
+    requestAnimationFrame(() => {
+      const c = $("g-" + id);
+      if (!c) return;
+      c.scrollIntoView({ block: "center" });
+      const h = c.querySelector("h3");
+      if (h) { h.focus(); const s = window.getSelection(); if (s) s.selectAllChildren(h); }
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-action]");
+    if (!el || !ui.editing) return;
+    const act = el.getAttribute("data-action"), gid = el.getAttribute("data-game"), i = Number(el.getAttribute("data-index"));
+    const g = gid ? findGame(gid) : null;
+    if (act === "link-add" && g) {
+      const arr = linksOf(g); arr.push({ title: "Tài liệu mới", url: "https://" });
+      state.links[gid] = arr; save(); render();
+      const inputs = document.querySelectorAll('#g-' + gid + ' [data-action="link-edit"][data-k="title"]');
+      if (inputs.length) { const last = inputs[inputs.length - 1]; last.focus(); last.select(); }
+    } else if (act === "link-del" && g) {
+      const before = linksOf(g), arr = linksOf(g); arr.splice(i, 1);
+      state.links[gid] = arr; save(); render();
+      toast("Đã xóa tài liệu", () => { state.links[gid] = before; save(); render(); });
+    } else if (act === "img-replace" && g) pickImage(gid, i);
+    else if (act === "img-add" && g) pickImage(gid, -1);
+    else if (act === "img-del" && g) {
+      const before = imagesOf(g), arr = imagesOf(g); arr.splice(i, 1);
+      state.images[gid] = arr; save(); render();
+      toast("Đã xóa ảnh", () => { state.images[gid] = before; save(); render(); });
+    } else if (act === "add-game") addGame(el.getAttribute("data-sec"));
+    else if (act === "gh-save") saveToWeb();
+  });
+
+  // ---------- Lưu lên web (ghi vào GitHub, trang tự cập nhật sau ít phút) ----------
+  const GH_TOKEN_KEY = "game-progress-gh-token";
+  const getToken = () => { try { return localStorage.getItem(GH_TOKEN_KEY) || ""; } catch (e) { return ""; } };
+  const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+  const fromB64 = (s) => decodeURIComponent(escape(atob(s.replace(/\n/g, ""))));
+  function askToken() {
+    return new Promise((resolve) => {
+      const dlg = $("gh-dialog"), inp = $("gh-token");
+      inp.value = "";
+      const finish = (v) => { dlg.close(); resolve(v); };
+      $("gh-ok").onclick = (ev) => {
+        ev.preventDefault();
+        const v = inp.value.trim();
+        if (!v) { inp.focus(); return; }
+        try { localStorage.setItem(GH_TOKEN_KEY, v); } catch (err) {}
+        finish(v);
+      };
+      $("gh-cancel").onclick = (ev) => { ev.preventDefault(); finish(""); };
+      dlg.oncancel = () => resolve("");
+      dlg.showModal();
+      inp.focus();
+    });
+  }
+  async function gh(cfg, token, path, opts) {
+    const o = opts || {};
+    const r = await fetch("https://api.github.com/repos/" + cfg.repo + path, {
+      method: o.method || "GET",
+      headers: Object.assign({ Authorization: "Bearer " + token, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, o.body ? { "Content-Type": "application/json" } : {}),
+      body: o.body
+    });
+    if (!r.ok) {
+      const err = new Error("GitHub " + r.status);
+      err.status = r.status;
+      try { err.detail = (await r.json()).message; } catch (x) {}
+      throw err;
+    }
+    return r.json();
+  }
+  let saving = false;
+  function setSaveBusy(b) {
+    const btn = $("save-web");
+    btn.disabled = b;
+    btn.textContent = b ? "Đang lưu…" : "Lưu lên web";
+  }
+  async function saveToWeb() {
+    const cfg = DATA.github;
+    if (!cfg || !cfg.repo) { toast("Chưa cấu hình mục github trong data.js."); return; }
+    if (saving) return;
+    if (!isDirty()) { toast("Chưa có thay đổi nào để lưu."); return; }
+    let token = getToken();
+    if (!token) { token = await askToken(); if (!token) return; }
+    saving = true; setSaveBusy(true);
+    try {
+      const out = buildExport();
+      const branch = cfg.branch || "main", path = cfg.path || "data.js";
+      // 1) tải ảnh mới lên thư mục images/
+      for (const sec of out.sections) for (const g of sec.games) for (const im of g.images || []) {
+        if (!im.pending) continue;
+        await gh(cfg, token, "/contents/images/" + encodeURIComponent(im.pending), {
+          method: "PUT",
+          body: JSON.stringify({ message: "Thêm ảnh " + im.pending, content: im.src.split(",")[1], branch: branch })
+        });
+        im.src = "images/" + im.pending;
+        delete im.pending;
+      }
+      // 2) ghi data.js, giữ nguyên phần chú thích ở đầu file
+      const cur = await gh(cfg, token, "/contents/" + path + "?ref=" + encodeURIComponent(branch));
+      const old = fromB64(cur.content), at = old.search(/^window\.PROGRESS\s*=/m); // đầu dòng, để không nhầm với chữ trong phần chú thích
+      const text = (at > 0 ? old.slice(0, at) : "") + "window.PROGRESS = " + JSON.stringify(out, null, 2) + ";\n";
+      await gh(cfg, token, "/contents/" + path, {
+        method: "PUT",
+        body: JSON.stringify({ message: "Cập nhật tiến độ từ trang web", content: b64(text), sha: cur.sha, branch: branch })
+      });
+      // 3) xong: dữ liệu vừa lưu trở thành dữ liệu gốc, xóa các chỉnh sửa tạm
+      BASE = { sections: JSON.parse(JSON.stringify(out.sections)) };
+      DATA.updated = out.updated;
+      state = EMPTY();
+      save(); render();
+      toast("Đã lưu lên web. Mọi người sẽ thấy sau khoảng 1 phút.");
+    } catch (e) {
+      if (e.status === 401) {
+        try { localStorage.removeItem(GH_TOKEN_KEY); } catch (x) {}
+        toast("Token không hợp lệ hoặc đã hết hạn. Bấm Lưu lên web để nhập token mới.");
+      } else if (e.status === 403 || e.status === 404) {
+        toast("Token chưa đủ quyền ghi vào repo. Cần quyền Contents: Read and write.");
+      } else if (e.status === 409 || e.status === 422) {
+        toast("Dữ liệu trên web vừa thay đổi. Tải lại trang rồi thử lại.");
+      } else {
+        toast("Không lưu được: " + (e.detail || e.message));
+      }
+    } finally {
+      saving = false; setSaveBusy(false);
+    }
+  }
+  $("save-web").addEventListener("click", saveToWeb);
+  $("gh-forget").addEventListener("click", () => {
+    try { localStorage.removeItem(GH_TOKEN_KEY); } catch (e) {}
+    toast("Đã xóa token khỏi trình duyệt này.");
+  });
+
+  // ---------- Kết nối chat ----------
+  async function createChatApi() {
+    if (CHAT.provider === "firebase") {
+      const base = "https://www.gstatic.com/firebasejs/10.14.1/";
+      const [appMod, fs] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-firestore.js")]);
+      const db = fs.getFirestore(appMod.initializeApp(CHAT.firebase));
+      const col = fs.collection(db, "rooms", room, "messages");
+      return {
+        subscribe: (onList, onErr) => fs.onSnapshot(fs.query(col, fs.orderBy("ts")),
+          (snap) => onList(snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))), onErr),
+        add: (m) => fs.addDoc(col, m),
+        remove: (id) => fs.deleteDoc(fs.doc(col, id)),
+        restore: (m) => { const rest = Object.assign({}, m); delete rest.id; return fs.setDoc(fs.doc(col, m.id), rest); }
+      };
+    }
+    // "local": chat thử giữa các tab cùng trình duyệt (không cần máy chủ)
+    const LSK = "gp-chat-local-" + room;
+    const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(LSK) : null;
+    const read = () => { try { return JSON.parse(localStorage.getItem(LSK)) || []; } catch (e) { return []; } };
+    const write = (l) => localStorage.setItem(LSK, JSON.stringify(l));
+    let cb = null;
+    const push = () => { if (cb) cb(read().sort((a, b) => a.ts - b.ts)); };
+    const changed = () => { if (bc) bc.postMessage(1); push(); };
+    if (bc) bc.onmessage = push;
+    window.addEventListener("storage", (e) => { if (e.key === LSK) push(); });
+    return {
+      subscribe: (onList) => { cb = onList; push(); return () => { cb = null; }; },
+      add: async (m) => { const l = read(); l.push(Object.assign({ id: uid("m-") }, m)); write(l); changed(); },
+      remove: async (id) => { write(read().filter((x) => x.id !== id)); changed(); },
+      restore: async (m) => { const l = read(); l.push(m); write(l); changed(); }
+    };
+  }
+
+  // Cập nhật khi có tin mới. Đang gõ chữ thì chỉ làm mới danh sách tin, không vẽ lại ô gõ
+  // (vẽ lại sẽ làm mất chữ đang gõ dở, nhất là gõ tiếng Việt kiểu Telex).
+  let knownIds = null, pendingRender = false;
+  const isTyping = () => {
+    const ae = document.activeElement;
+    if (ae && ae.isContentEditable) return true; // đang sửa chữ trực tiếp trên trang
+    return !!(ae && ae.matches && ae.matches(".composer textarea, .composer input, .le, .add-task input") && (ae.value || "").length);
+  };
+  function softRender() {
+    if (!isTyping()) { pendingRender = false; render(); return; }
+    pendingRender = true;
+    document.querySelectorAll(".game").forEach((el) => {
+      const g = findGame(el.id.slice(2));
+      const w = el.querySelector(".thread-wrap");
+      if (g && w) w.innerHTML = threadHtml(g);
+    });
+    if (ui.pop) {
+      const g = findGame(ui.pop.gid);
+      const w = popEl.querySelector(".pop-thread-wrap");
+      if (g && w) w.innerHTML = popThreadHtml(g, ui.pop);
+    }
+  }
+  document.addEventListener("focusout", () => {
+    if (!pendingRender) return;
+    setTimeout(() => { if (pendingRender && !isTyping()) { pendingRender = false; render(); } }, 400);
+  });
+  function onRemote(list) {
+    const prev = knownIds;
+    knownIds = new Set(list.map((m) => m.id));
+    remote = list;
+    if (prev) {
+      const fresh = list.filter((m) => !prev.has(m.id) && m.cid !== myCid);
+      if (fresh.length) { const m = fresh[fresh.length - 1]; toast(m.author + ": " + short(m.text, 70)); }
+    }
+    softRender();
+    if (!chatReady) {
+      chatReady = true;
+      if (/^#t-/.test(location.hash)) handleHash(false); // mở đúng phần từ link email khi tin đã tải xong
+    }
+  }
+  async function initChat() {
+    if (!chatOn || !room) return;
+    try {
+      chatApi = await createChatApi();
+      chatApi.subscribe(onRemote, () => toast("Mất kết nối chat, hãy tải lại trang."));
+    } catch (e) {
+      toast("Không kết nối được chat.");
+    }
+  }
 
   render();
   handleHash(true);
+  initChat();
 })();

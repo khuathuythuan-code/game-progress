@@ -1,5 +1,10 @@
 /*
   ====== DỮ LIỆU TRANG — CHỈ CẦN SỬA FILE NÀY KHI CẬP NHẬT ======
+  CÁCH DỄ NHẤT: sửa ngay trên trang (nút "Chỉnh sửa" ở thanh trên cùng) rồi bấm "Lưu lên web".
+  Trang sẽ tự ghi lại file này. Khi đó chỉ phần từ dòng "window.PROGRESS" trở xuống bị ghi đè,
+  phần chú thích này được giữ nguyên. Vì vậy ĐỪNG viết chú thích bên trong dữ liệu bên dưới.
+
+  Sửa tay (nếu muốn):
   - Thêm game: copy 1 khối { ... } trong "games" của mục tương ứng rồi sửa.
   - Chuyển game sang mục khác: cắt khối game dán sang mục khác.
   - Ảnh: bỏ file vào thư mục images/ rồi ghi đường dẫn vào "images".
@@ -15,14 +20,20 @@
       notify.accessKey : chỉ Web3Forms cần (các dịch vụ khác để trống)
     Để trống notify.url thì trang không tự gửi; người xem bấm "Gửi nhận xét"
     để sao chép nội dung (hoặc mở email nếu bạn điền feedbackEmail).
+  - notify (Web3Forms): accessKey chỉ cho phép gửi thư về hộp thư đã đăng ký với Web3Forms,
+    không để lộ địa chỉ email, nên để công khai trong mã trang là bình thường.
+  - chat (xem README, mục "Chat hai chiều"): điền cấu hình Firebase rồi đổi provider thành "firebase".
+    Các giá trị Firebase là thông tin công khai, không phải mật khẩu.
+  - github: nơi nút "Lưu lên web" ghi dữ liệu (repo, nhánh, đường dẫn file). Token KHÔNG nằm ở đây:
+    mỗi lần dùng lần đầu, trang hỏi token và chỉ nhớ trong trình duyệt của bạn.
 */
 window.PROGRESS = {
   title: "Tiến độ phát triển game",
   subtitle: "Báo cáo tiến độ các dự án game của team",
   updated: "20/11/2026",
-  // Thông báo email khi có nhận xét mới (Web3Forms). accessKey chỉ cho phép gửi thư về hộp thư đã đăng ký
-  // với Web3Forms, không để lộ địa chỉ email, nên để công khai trong mã trang là bình thường.
   notify: { url: "https://api.web3forms.com/submit", accessKey: "1be8f425-c4fd-433d-b4e3-1bb481bd5bb0" },
+  chat: { provider: "", firebase: { apiKey: "", authDomain: "", projectId: "", appId: "" } },
+  github: { repo: "khuathuythuan-code/game-progress", branch: "main", path: "data.js" },
   feedbackEmail: "",
   sections: [
     {

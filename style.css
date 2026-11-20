@@ -87,10 +87,16 @@ main:focus { outline: none; }
 }
 
 /* ---------- Điều hướng ---------- */
-.tabs {
+.topbar {
   position: sticky; top: 0; z-index: 20;
-  display: flex; gap: 6px; align-items: center; justify-content: center;
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.top-edit { flex: none; padding: 6px 14px; white-space: nowrap; }
+.top-edit.on { background: var(--accent); color: var(--accent-ink); }
+.tabs {
+  flex: 1; min-width: 0;
+  display: flex; gap: 6px; align-items: center; justify-content: center;
   overflow-x: auto; scrollbar-width: none;
 }
 .tabs::-webkit-scrollbar { display: none; }
@@ -256,7 +262,7 @@ h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
 .btn:hover { filter: brightness(1.1); }
 
 .send-pill {
-  position: fixed; right: 16px; bottom: 16px; z-index: 30; padding: 10px 18px;
+  position: fixed; right: 76px; bottom: 16px; z-index: 30; padding: 10px 18px;
   border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink);
   font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, .3);
 }
@@ -270,6 +276,9 @@ h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
   .task label { padding: 4px 0; }
   .tabs a, .tabs button { padding: 10px 14px; }
   .link-btn { padding: 8px; }
+  .top-edit { min-height: 44px; }
+  .task-check { width: 22px; height: 22px; }
+  .seg-btn { padding: 9px 12px; }
 }
 
 /* ---------- Chế độ chỉnh sửa ---------- */
@@ -282,12 +291,78 @@ h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
 .editbar strong { color: var(--text); }
 .editbar code { background: var(--bg); padding: 0 5px; border-radius: 4px; }
 .editbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.editbar .dirty { display: inline-block; margin-left: 6px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--dev) 16%, transparent); color: var(--dev); font-weight: 600; }
 body.editing { padding-bottom: 110px; }
-body.editing .send-pill { bottom: 120px; }
+body.editing .send-pill, body.editing .to-top { bottom: 120px; }
 body.editing .toast { bottom: 130px; }
 
-/* ---------- Chân trang ---------- */
-.foot { margin: 40px auto 72px; }
+/* ---------- Cuối trang ---------- */
+.foot-space { height: 72px; }
+.to-top {
+  position: fixed; right: 16px; bottom: 16px; z-index: 30; width: 46px; height: 46px;
+  display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%;
+  background: var(--surface); color: var(--text); cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+}
+.to-top:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* ---------- Bộ lọc ---------- */
+.filterwrap { margin-top: 18px; }
+.filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.filterbar input[type="search"], .filterbar select {
+  min-height: 40px; padding: 8px 12px; font: inherit; font-size: .92rem; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+}
+.filterbar input[type="search"] { flex: 1 1 240px; min-width: 0; }
+.filterbar input:focus, .filterbar select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.seg-btn { padding: 5px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.seg-btn:hover { background: var(--bg); }
+.seg-btn.on { background: var(--accent); color: var(--accent-ink); }
+.f-count { color: var(--muted); font-size: .88rem; }
+
+/* ---------- Sửa trực tiếp ---------- */
+.editable { outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 4px; cursor: text; min-width: 2ch; }
+.editable:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.editable:focus { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.editable:empty::before { content: attr(data-ph); color: var(--muted); }
+.mover { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 20px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.drag-handle { padding: 4px 12px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: .88rem; cursor: grab; user-select: none; background: var(--surface); }
+.drag-handle:hover { color: var(--text); border-color: var(--accent); }
+.drag-handle:active { cursor: grabbing; }
+.move-label { display: inline-flex; align-items: center; gap: 6px; }
+.move-sel { min-height: 34px; padding: 4px 10px; font: inherit; font-size: .88rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.game.drag-src { opacity: .45; }
+.drop-hint { display: none; margin-bottom: 14px; padding: 14px; text-align: center; border: 2px dashed var(--c); border-radius: 10px; color: var(--c); font-weight: 600; background: color-mix(in srgb, var(--c) 6%, transparent); }
+body.dragging .drop-hint { display: block; }
+.section.drop-hover { outline: 3px solid var(--c); outline-offset: 8px; border-radius: 12px; }
+.section.drop-hover .drop-hint { background: color-mix(in srgb, var(--c) 18%, transparent); }
+.add-game { width: 100%; margin-bottom: 8px; border-style: dashed; }
+
+.task-check { flex: none; width: 17px; height: 17px; accent-color: var(--c); }
+.task .editable { flex: 1; }
+.imgbox { position: relative; }
+.img-tools { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 6px; }
+.img-btn { padding: 4px 10px; border: 0; border-radius: 8px; background: rgba(10, 13, 20, .78); color: #fff; font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
+.img-btn:hover { background: var(--accent); color: var(--accent-ink); }
+.img-btn.danger:hover { background: var(--danger); color: #fff; }
+.gallery figure.add-img { display: grid; flex-basis: min(60%, 260px); }
+.add-img-btn { min-height: 120px; aspect-ratio: 16 / 9; border: 2px dashed var(--border); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.add-img-btn:hover { border-color: var(--accent); color: var(--accent); }
+.link-edit { display: grid; grid-template-columns: 1fr 1.3fr auto; gap: 6px; align-items: center; }
+.le { width: 100%; min-width: 0; padding: 6px 10px; font: inherit; font-size: .88rem; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.le:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.add-link { margin-top: 8px; }
+@media (max-width: 640px) { .link-edit { grid-template-columns: 1fr auto; } .link-edit .le:nth-child(2) { grid-column: 1 / 2; } }
+
+.gh-dialog { width: min(480px, calc(100% - 24px)); padding: 20px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.gh-dialog::backdrop { background: rgba(5, 8, 20, .6); }
+.gh-dialog h2 { margin: 0 0 8px; font-size: 1.2rem; }
+.gh-dialog p, .gh-dialog li { font-size: .92rem; color: var(--muted); }
+.gh-dialog ol { padding-left: 20px; margin: 8px 0 14px; }
+.gh-dialog a { color: var(--accent); word-break: break-all; }
+.gh-dialog input { width: 100%; padding: 9px 12px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+.gh-actions { display: flex; gap: 8px; margin-top: 14px; }
+.gh-forget { margin: 12px 0 0; }
 
 /* ---------- Phóng to ảnh ---------- */
 .lightbox {

@@ -23,26 +23,62 @@
     </div>
   </header>
 
-  <nav class="tabs" id="tabs" aria-label="Điều hướng mục"></nav>
+  <div class="topbar" id="topbar">
+    <nav class="tabs" id="tabs" aria-label="Điều hướng mục"></nav>
+    <button class="btn ghost top-edit" id="enter-edit" type="button" aria-pressed="false">Chỉnh sửa</button>
+  </div>
+
+  <div class="wrap filterwrap">
+    <div class="filterbar" id="filterbar" role="search" aria-label="Lọc game">
+      <input id="f-q" type="search" placeholder="Tìm game theo tên, thể loại, nền tảng…" aria-label="Tìm game" autocomplete="off">
+      <div class="seg" id="f-sec" role="group" aria-label="Lọc theo mục"></div>
+      <select id="f-genre" aria-label="Lọc theo thể loại"><option value="">Mọi thể loại</option></select>
+      <span class="f-count" id="f-count" aria-live="polite"></span>
+      <button class="link-btn" id="f-clear" type="button" hidden>Xóa lọc</button>
+    </div>
+  </div>
 
   <main class="wrap" id="app" tabindex="-1">
     <noscript><p class="empty">Trang cần bật JavaScript để hiển thị nội dung.</p></noscript>
   </main>
 
-  <footer class="wrap foot">
-    <button class="btn ghost" id="enter-edit">Chỉnh sửa trang này</button>
-  </footer>
+  <div class="foot-space"></div>
 
   <button class="send-pill" id="send" hidden></button>
+  <button class="to-top" id="to-top" type="button" aria-label="Lên đầu trang" hidden>
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
 
   <div class="editbar" id="editbar" hidden>
-    <p><strong>Đang chỉnh sửa.</strong> Thay đổi chỉ lưu trên trình duyệt này. Muốn giữ lâu dài, bấm "Sao chép dữ liệu" rồi dán đè vào <code>data.js</code>.</p>
+    <p><strong>Đang chỉnh sửa.</strong> Sửa chữ, ảnh, link ngay trên trang, kéo game sang mục khác bằng nút ⠿. Bấm <strong>Lưu lên web</strong> để mọi người thấy.
+      <span class="dirty" id="dirty" hidden>Có thay đổi chưa lưu.</span></p>
     <div class="editbar-actions">
-      <button class="btn ghost" id="export">Sao chép dữ liệu</button>
-      <button class="btn ghost" id="reset">Khôi phục</button>
-      <button class="btn" id="exit-edit">Xong</button>
+      <button class="btn" id="save-web" type="button">Lưu lên web</button>
+      <button class="btn ghost" id="export" type="button">Sao chép dữ liệu</button>
+      <button class="btn ghost" id="reset" type="button">Bỏ thay đổi</button>
+      <button class="btn ghost" id="exit-edit" type="button">Xong</button>
     </div>
   </div>
+
+  <dialog class="gh-dialog" id="gh-dialog" aria-labelledby="gh-title">
+    <form method="dialog">
+      <h2 id="gh-title">Kết nối GitHub để lưu</h2>
+      <p>Dán <strong>token GitHub</strong> của bạn. Token chỉ lưu trên trình duyệt này, không nằm trong code hay repo.</p>
+      <ol>
+        <li>Mở <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">github.com/settings/personal-access-tokens/new</a>.</li>
+        <li>Repository access: <em>Only select repositories</em>, chọn repo <code>game-progress</code>.</li>
+        <li>Permissions, Repository permissions: <strong>Contents = Read and write</strong>.</li>
+        <li>Đặt hạn dùng (ví dụ 90 ngày), tạo token và dán vào đây.</li>
+      </ol>
+      <label class="sr-only" for="gh-token">Token GitHub</label>
+      <input id="gh-token" type="password" autocomplete="off" placeholder="github_pat_…">
+      <div class="gh-actions">
+        <button class="btn" id="gh-ok" type="submit">Lưu và tiếp tục</button>
+        <button class="btn ghost" id="gh-cancel" type="button">Hủy</button>
+      </div>
+      <p class="gh-forget"><button class="link-btn" id="gh-forget" type="button">Xóa token đã lưu trên trình duyệt này</button></p>
+    </form>
+  </dialog>
 
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Xem ảnh" hidden>
     <button class="lb-close" aria-label="Đóng">✕</button>
@@ -65,7 +101,16 @@
     <button id="toast-undo" hidden>Hoàn tác</button>
   </div>
 
-  <script src="data.js"></script>
-  <script src="app.js"></script>
+  <!-- Nạp data.js kèm mã thời gian để luôn lấy bản mới nhất sau khi lưu lên web (tránh bị cache) -->
+  <script>
+    (function () {
+      ["data.js?v=" + Date.now(), "app.js"].forEach(function (src) {
+        var s = document.createElement("script");
+        s.src = src;
+        s.async = false; // giữ đúng thứ tự: data.js chạy trước app.js
+        document.body.appendChild(s);
+      });
+    })();
+  </script>
 </body>
 </html>

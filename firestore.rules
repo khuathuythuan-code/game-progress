@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Chat chỉ nằm trong rooms/{mã-bí-mật}/messages. Mã phải dài (>= 20 ký tự) và không ai
+    // liệt kê được danh sách rooms, nên chỉ người có link chứa mã mới đọc/ghi được.
+    match /rooms/{room}/messages/{msg} {
+      allow read: if room.size() >= 20;
+
+      allow create: if room.size() >= 20
+        && request.resource.data.keys().hasOnly(['gid', 'tid', 'tlabel', 'author', 'text', 'ts', 'cid'])
+        && request.resource.data.keys().hasAll(['gid', 'author', 'text', 'ts', 'cid'])
+        && request.resource.data.gid is string && request.resource.data.gid.size() <= 80
+        && request.resource.data.author is string
+        && request.resource.data.author.size() > 0 && request.resource.data.author.size() <= 40
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 600
+        && request.resource.data.ts is number
+        && request.resource.data.cid is string && request.resource.data.cid.size() <= 40
+        && (!('tid' in request.resource.data) || (request.resource.data.tid is string && request.resource.data.tid.size() <= 200))
+        && (!('tlabel' in request.resource.data) || (request.resource.data.tlabel is string && request.resource.data.tlabel.size() <= 200));
+
+      // Xóa được (để dọn tin hoặc hoàn tác); không sửa nội dung tin đã gửi.
+      allow delete: if room.size() >= 20;
+      allow update: if false;
+    }
+  }
+}
