@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tiến độ phát triển game</title>
+  <meta name="description" content="Báo cáo tiến độ các dự án game của team">
+  <meta name="theme-color" content="#161a26">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23161a26'/%3E%3Crect x='6' y='17' width='5' height='9' rx='1' fill='%2334d399'/%3E%3Crect x='13.5' y='11' width='5' height='15' rx='1' fill='%23fb923c'/%3E%3Crect x='21' y='6' width='5' height='20' rx='1' fill='%23a5b4fc'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#app">Bỏ qua, đến nội dung chính</a>
+
+  <header class="hero">
+    <div class="wrap">
+      <h1 id="title"></h1>
+      <p class="updated">Cập nhật lần cuối <strong id="updated"></strong></p>
+      <div id="board" class="board" aria-label="Tổng quan các game"></div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="Điều hướng mục"></nav>
+
+  <main class="wrap" id="app" tabindex="-1">
+    <noscript><p class="empty">Trang cần bật JavaScript để hiển thị nội dung.</p></noscript>
+  </main>
+
+  <footer class="wrap foot">
+    <button class="btn ghost" id="enter-edit">Chỉnh sửa trang này</button>
+  </footer>
+
+  <button class="send-pill" id="send" hidden></button>
+
+  <div class="editbar" id="editbar" hidden>
+    <p><strong>Đang chỉnh sửa.</strong> Thay đổi chỉ lưu trên trình duyệt này. Muốn giữ lâu dài, bấm "Sao chép dữ liệu" rồi dán đè vào <code>data.js</code>.</p>
+    <div class="editbar-actions">
+      <button class="btn ghost" id="export">Sao chép dữ liệu</button>
+      <button class="btn ghost" id="reset">Khôi phục</button>
+      <button class="btn" id="exit-edit">Xong</button>
+    </div>
+  </div>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Xem ảnh" hidden>
+    <button class="lb-close" aria-label="Đóng">✕</button>
+    <button class="lb-nav lb-prev" aria-label="Ảnh trước">‹</button>
+    <figure>
+      <img alt="">
+      <figcaption></figcaption>
+    </figure>
+    <button class="lb-nav lb-next" aria-label="Ảnh sau">›</button>
+  </div>
+
+  <button class="annot-chip" id="annot-chip" type="button" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    <span>Nhận xét</span>
+  </button>
+  <div class="annot-pop" id="annot-pop" role="dialog" aria-label="Nhận xét về phần này" hidden></div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span id="toast-msg"></span>
+    <button id="toast-undo" hidden>Hoàn tác</button>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
