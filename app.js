@@ -1294,6 +1294,14 @@
     });
     await Promise.race([first, new Promise((r) => setTimeout(r, 5000))]); // đợi biết đã đăng nhập sẵn chưa, tối đa 5 giây
     if (!authUser) startGooglePrompt(); // chưa đăng nhập: tự hỏi "tiếp tục với tài khoản Google này?"
+    if (!authUser && !String(CHAT.googleClientId || "").trim()) offerSignInDialog(); // chưa có Client ID: dùng hộp thoại của trang
+  }
+  // Khi chưa có googleClientId (chưa hiện được hộp của Google): trên trình duyệt của chủ trang (đã từng bấm Chỉnh sửa)
+  // tự mở hộp thoại "Đăng nhập Google" ngay khi vào, mỗi lần mở trình duyệt một lần. Người xem thông thường không thấy.
+  function offerSignInDialog() {
+    if (!AUTH_ON || CHAT.autoPrompt === false || !legacyOwner()) return;
+    try { if (sessionStorage.getItem("game-progress-signin-offered") === "1") return; sessionStorage.setItem("game-progress-signin-offered", "1"); } catch (e) {}
+    setTimeout(() => { if (!authUser) openAuth(); }, 600);
   }
   // Hộp gợi ý đăng nhập nhanh của Google (One Tap): vừa vào trang, nếu trình duyệt đang đăng nhập Gmail thì hiện
   // "Tiếp tục với tài khoản …". Cần mã OAuth Web client ID (googleClientId trong data.js); để trống thì không hiện.
