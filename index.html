@@ -10,7 +10,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap">
-  <link rel="stylesheet" href="style.css">
+  <!-- style.css cũng kèm mã thời gian như app.js/data.js để không bao giờ dùng nhầm bản cũ trong bộ nhớ đệm -->
+  <script>document.write('<link rel="stylesheet" href="style.css?v=' + Date.now() + '">');</script>
+  <noscript><link rel="stylesheet" href="style.css"></noscript>
   <script>
     // Áp dụng giao diện đã chọn ngay từ đầu để trang không nháy sáng rồi mới tối
     try { var t = localStorage.getItem("game-progress-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}

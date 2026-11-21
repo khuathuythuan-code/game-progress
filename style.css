@@ -18,11 +18,19 @@
   --planned-lt: #a5b4fc;
   --font: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-:root { color-scheme: light; }
+:root { color-scheme: light; --scroll-thumb: #b4bccd; }
+/* Thanh cuộn mảnh, cùng tông với giao diện (không còn thanh cuộn hệ thống có mũi tên) */
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 2px solid transparent; background-clip: content-box; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 /* Chế độ tối: tự theo hệ thống (trừ khi người xem chọn Sáng) hoặc do người xem chọn Tối bằng nút trên header */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
+    --scroll-thumb: #3b4360;
     --bg: #0e111a;
     --surface: #161a26;
     --text: #e7eaf2;
@@ -39,6 +47,7 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --scroll-thumb: #3b4360;
   --bg: #0e111a;
   --surface: #161a26;
   --text: #e7eaf2;
