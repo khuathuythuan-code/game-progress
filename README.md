@@ -1,163 +1,121 @@
 # Trang báo cáo tiến độ game
 
-Trang web tĩnh (HTML/CSS/JS thuần), không cần cài đặt hay build.
+Trang web tĩnh (HTML/CSS/JS thuần). **GitHub chỉ giữ code**, còn **chữ, ảnh, tiến độ và tin nhắn nằm trong
+cơ sở dữ liệu (Firebase Realtime Database hoặc Firestore)**. Sửa nội dung trên trang là tự lưu và mọi người thấy ngay, không cần
+commit hay push.
 
 ## Cấu trúc
 
 ```
-index.html   – khung trang
-style.css    – giao diện
-app.js       – logic (render, chế độ xem/sửa, nhận xét, xuất dữ liệu)
-data.js      – ⭐ TOÀN BỘ nội dung: sửa file này khi cập nhật
-images/      – ảnh game (hiện là ảnh mẫu .svg, thay bằng .png/.jpg của bạn)
+index.html      – khung trang
+style.css       – giao diện
+app.js          – toàn bộ logic (hiển thị, sửa tại chỗ, lọc, chat, kết nối cơ sở dữ liệu)
+data.js         – cấu hình kết nối + dữ liệu MẪU (chỉ dùng nạp lần đầu vào cơ sở dữ liệu trống)
+database.rules.json – quy tắc bảo mật dán vào Firebase Realtime Database
+firestore.rules     – quy tắc bảo mật dán vào Firestore (nếu dùng Firestore)
+images/         – ảnh mẫu đi kèm dữ liệu mẫu
 ```
 
-## Thanh trên cùng, lọc game, cuộn lên đầu
-- Nút **Chỉnh sửa** nằm ở góc phải thanh trên cùng (thanh này luôn dính ở đầu màn hình khi cuộn).
-- **Lọc game**: ô tìm kiếm (tìm theo tên, thể loại, nền tảng, mô tả; gõ không dấu vẫn tìm được),
-  nút lọc theo mục (Hoàn thành / Đang phát triển / Dự kiến) và lọc theo thể loại.
-- Nút mũi tên ở góc phải dưới hiện ra khi cuộn xuống, bấm để về đầu trang.
+## Cách hoạt động và bảo mật
+- Không có đăng nhập. Quyền truy cập nằm ở **link riêng có mã bí mật**: `https://.../game-progress/?k=<mã>`.
+  Mã dài từ 20 ký tự, không nằm trong code hay repo. Trình duyệt nhớ mã sau lần đầu mở link.
+- Ai chỉ có link trang (không có mã) sẽ thấy "Trang này cần link riêng" và không đọc hay sửa được gì.
+- **Ai có link kèm mã thì đọc và sửa được tất cả**, kể cả sửa hay xóa nội dung. Chỉ gửi link cho sếp.
+  Nếu lộ, đổi mã mới (nội dung ở mã cũ sẽ không còn hiện, nhớ tải bản sao lưu trước).
+- Đừng đưa thông tin cá nhân nhạy cảm vào trang. Dữ liệu nằm trên máy chủ Google, không mã hóa đầu cuối.
 
-## Hai chế độ
+## Cài đặt cơ sở dữ liệu (một lần, khoảng 10 phút)
+Trang dùng được **một trong hai** loại cơ sở dữ liệu của Firebase. Dự án hiện tại dùng **Realtime Database**
+(`provider: "rtdb"`). Hai loại có file quy tắc khác nhau, **không dán nhầm file này vào ô quy tắc của loại kia**
+(sẽ báo "Parse error").
 
-- **Chế độ xem** (mặc định, dành cho sếp): gọn, không có nút sửa/xóa.
-- **Chế độ chỉnh sửa**: bấm **Chỉnh sửa** trên thanh trên cùng (hoặc mở link có `?edit`). Sửa thẳng trên trang:
-  - **Chữ**: bấm vào tên game, thể loại, nền tảng, ghi chú, mô tả, nội dung từng việc, chú thích ảnh
-    (ô viền nét đứt) và gõ. Rời ô là tự ghi nhận. Enter để xong (riêng mô tả, Enter xuống dòng).
-  - **Ảnh**: **Thay ảnh** / **Xóa** trên mỗi ảnh, **+ Thêm ảnh** ở cuối dải ảnh. Ảnh được tự thu nhỏ
-    (tối đa 1280px) và nén để nhẹ.
-  - **Tài liệu tham khảo**: sửa tên và địa chỉ, **+ Thêm tài liệu**, nút ✕ để xóa.
-  - **Việc cần làm**: tích xong, thêm, xóa, sửa chữ. **Tiến độ**: thanh kéo %.
-  - **Thêm game mới**: nút **+ Thêm game vào "…"** ở cuối mỗi mục. **Xóa game**: nút ✕.
-  - **Chuyển game sang mục khác**: ở đầu mỗi game, kéo nút **⠿ Kéo** thả vào mục khác, hoặc chọn mục
-    ở ô bên phải (dùng cho điện thoại, nơi không kéo thả được). Chuyển sang "Hoàn thành" thì tiến độ
-    tự thành 100%, sang "Dự kiến" thì về 0%.
-  - Mọi thao tác xóa/chuyển đều có nút **Hoàn tác** trong 7 giây.
-- **Lưu lên web** (nút xanh ở thanh dưới): ghi mọi thay đổi vào GitHub, trang công khai cập nhật sau
-  khoảng 1 phút. **Bỏ thay đổi** để quay về bản đang chạy. **Sao chép dữ liệu** là cách thủ công
-  (dán vào `data.js`), không kèm ảnh mới.
-
-### Lưu lên web: cần token GitHub (một lần)
-Lần đầu bấm Lưu, trang hỏi token. Tạo ở github.com/settings/personal-access-tokens/new:
-repo chỉ chọn `game-progress`, quyền **Contents = Read and write**, đặt hạn (ví dụ 90 ngày).
-Token **chỉ lưu trong trình duyệt của bạn**, không nằm trong code hay repo. Hãy coi như mật khẩu và chỉ
-dùng trên máy của bạn. Hết hạn thì tạo token mới và dán lại. Có thể xóa token ngay trong hộp thoại.
-Nếu bạn sửa cùng lúc từ hai máy, lần lưu sau sẽ ghi đè lần trước.
-Trang nạp `data.js` kèm mã thời gian nên người xem thấy bản mới ngay khi GitHub Pages deploy xong.
-
-## Cập nhật nội dung bằng tay (data.js)
-
-Vẫn sửa tay được nếu muốn:
-- **Thêm game**: copy một khối game trong `games` của mục cần thêm, đổi `id` (không trùng), tên, mô tả, ảnh...
-- **Chuyển mục**: cắt khối game dán sang mục khác, đặt `progress` cho hợp.
-- **Thêm ảnh**: bỏ file vào `images/`, thêm `{ src: "images/ten-anh.png", caption: "Chú thích" }`.
-  Ảnh nên tỉ lệ 16:9 (ví dụ 1280×720), dưới ~300KB mỗi ảnh.
-- **Đổi ngày cập nhật**: sửa `updated`.
-- Phần chú thích đầu `data.js` được giữ nguyên khi dùng Lưu lên web, nhưng **đừng viết chú thích bên
-  trong phần dữ liệu** vì sẽ bị ghi đè.
-
-## Nhận xét theo từng phần giao diện
-
-- **Máy tính**: rê chuột vào bất kỳ phần nào (từng ảnh, tiến độ, mô tả, từng việc, từng link tài liệu,
-  tên game). Nút **Nhận xét** hiện ở góc phải, bấm vào để mở bong bóng nhập nhận xét ngay tại chỗ đó.
-- **Điện thoại/máy tính bảng**: bấm nút **Nhận xét** trên thanh điều hướng để bật chế độ chọn,
-  rồi chạm vào phần muốn nhận xét. Bong bóng hiện ở đáy màn hình.
-- Phần nào đã có nhận xét sẽ có vạch màu bên trái (ảnh thì có viền màu), nút hiện kèm số nhận xét.
-- Cuối mỗi game còn khung **Nhận xét** chung, hiển thị toàn bộ nhận xét của game đó. Mỗi nhận xét
-  theo phần có nhãn "về: ..." để bấm nhảy tới đúng phần đó.
-
-## Nhận xét và thông báo email
-
-Trang tĩnh không có máy chủ, nên nhận xét ban đầu chỉ nằm trên máy người viết.
-Để bạn nhận được, có hai cách:
-
-1. **Tự động gửi email (khuyến nghị)**: dùng một dịch vụ form miễn phí. Mỗi nhận xét mới sẽ được
-   gửi tới dịch vụ, và dịch vụ chuyển về hộp thư của bạn.
-   - **Web3Forms** (web3forms.com, **đang được cấu hình sẵn trong `data.js`**): nhập email của bạn
-     để nhận Access Key. Trong `data.js` điền
-     `notify: { url: "https://api.web3forms.com/submit", accessKey: "KEY_CỦA_BẠN" }`.
-     Khóa này không để lộ email của bạn. Muốn đổi email nhận, vào web3forms.com tạo khóa mới.
-   - **FormSubmit** (formsubmit.co, không cần tài khoản): đặt
-     `notify.url = "https://formsubmit.co/ajax/<email-của-bạn>"`. Lần gửi đầu tiên FormSubmit gửi email
-     **kích hoạt** tới hộp thư đó, bấm xác nhận một lần. Email đó có **chuỗi mã riêng**: nên đổi
-     `<email-của-bạn>` thành chuỗi mã, nếu không ai xem mã nguồn trang cũng thấy email của bạn.
-   - **Formspree** (formspree.io): tạo một form, xác nhận email, lấy địa chỉ dạng
-     `https://formspree.io/f/xxxxxxxx`. Điền `notify: { url: "địa chỉ đó", accessKey: "" }`.
-   - Gói miễn phí có giới hạn số thư mỗi tháng, hãy xem trên trang của dịch vụ.
-   - Địa chỉ/khóa này nằm trong mã trang nên ai xem mã nguồn cũng thấy. Đây là cách các dịch vụ
-     này hoạt động, chúng có chống spam, nhưng đừng dùng cho thông tin nhạy cảm.
-2. **Gửi thủ công**: nếu để trống `notify.url`, nút nổi **Gửi nhận xét (n)** sẽ sao chép toàn bộ
-   nhận xét (hoặc mở email nếu bạn điền `feedbackEmail`) để người xem dán vào chat/email.
-
-Chỉ có **một email nhận duy nhất**, là email gắn với khóa trong `notify`. Người xem không nhập email nào.
-
-Email bạn nhận gồm: tên người nhận xét, game, phần được nhận xét (ví dụ "Ảnh 2: Bộ sưu tập rồng"),
-nội dung, và **một link mở đúng phần đó**: trang tự cuộn tới, viền nổi bật phần được nhận xét và hiện
-sẵn nội dung nhận xét trong bong bóng (đánh dấu "từ link email").
-
-Nếu gửi tự động thất bại (mất mạng...), nhận xét vẫn được giữ và nút **Gửi nhận xét** hiện để gửi lại.
-
-Muốn nhận xét của sếp hiện cho mọi người xem, thêm vào mảng `comments` của game trong `data.js`:
-`{ id: "cm-9", author: "Sếp", text: "Nội dung", time: "2026-11-20T09:30:00" }`.
-
-## Chat hai chiều giữa bạn và sếp (Firebase)
-
-Khi bật chat, các nhận xét trở thành **hội thoại chung**: tin của sếp hiện ngay cho bạn, tin trả lời
-của bạn hiện ngay cho sếp, không cần tải lại trang. Nội dung trang vẫn lưu trong git như cũ, chỉ chat
-nằm trên Firebase Firestore (gói miễn phí Spark).
-
-### Cách hoạt động và bảo mật
-- Chat chỉ mở khi trang được mở bằng **link bí mật**: `https://.../game-progress/?k=<mã-bí-mật>`.
-  Mã dài 20 ký tự trở lên, **không nằm trong code hay repo**. Người không có mã chỉ xem được nội dung,
-  không thấy chat và không nhắn được. Trình duyệt nhớ mã sau lần đầu mở link.
-- Ai có link thì đọc và viết được: chỉ gửi link cho sếp. Nếu lộ, đổi mã mới (gửi link mới cho sếp,
-  tin cũ ở mã cũ sẽ không còn hiện).
-- Quy tắc bảo mật của Firestore nằm trong `firestore.rules`.
-- Tin nhắn lưu trên máy chủ Google, không mã hóa đầu cuối.
-- Sếp nhắn thì email vẫn báo về cho bạn (qua `notify`). Tin bạn trả lời không gửi email.
-  Link trong email **không chứa mã bí mật**: hãy mở link đó trên trình duyệt bạn đã từng vào bằng link có mã.
-
-### Cài đặt (một lần, khoảng 10 phút)
+**Cách A: Realtime Database (đang dùng)**
 1. Vào console.firebase.google.com, **Create a project**, đặt tên, tắt Google Analytics, Create.
-2. Menu trái chọn **Build, Firestore Database, Create database**. Chọn vị trí gần bạn
-   (ví dụ `asia-southeast1` Singapore, **không đổi được sau này**), chọn **production mode**, Enable.
-3. Mở tab **Rules**, dán toàn bộ nội dung file `firestore.rules`, bấm **Publish**.
-4. Vào **Project settings** (biểu tượng bánh răng), mục **Your apps**, bấm biểu tượng web `</>`, đặt tên
-   rồi **Register app**. Copy các giá trị `apiKey`, `authDomain`, `projectId`, `appId`.
-5. Trong `data.js` điền các giá trị đó và đổi `provider` thành `"firebase"`:
-   `chat: { provider: "firebase", firebase: { apiKey: "...", authDomain: "...", projectId: "...", appId: "..." } }`
-6. Commit và push. Gửi sếp link `https://khuathuythuan-code.github.io/game-progress/?k=<mã-bí-mật>`.
-   Bạn cũng mở trang bằng link có mã đó một lần trên máy của mình.
+2. **Build, Realtime Database, Create Database**. Chọn vị trí (ví dụ `asia-southeast1`), chọn **locked mode**.
+3. Tab **Rules**: xóa hết, dán toàn bộ nội dung file `database.rules.json`, bấm **Publish**.
+4. Trong `data.js`, mục `db.firebase` điền `databaseURL` (địa chỉ ở đầu trang Realtime Database, dạng
+   `https://<tên-dự-án>-default-rtdb.<vùng>.firebasedatabase.app`) và `projectId`, `provider: "rtdb"`.
+   `apiKey` và `appId` (Project settings, Your apps, biểu tượng web `</>`, Register app) nên điền để chắc chắn,
+   nhưng Realtime Database có thể chạy được khi để trống.
 
-Chưa điền cấu hình Firebase thì trang tự chạy ở chế độ cũ (nhận xét lưu trên máy người viết + email).
-`provider: "local"` chỉ để thử giao diện giữa các tab cùng một trình duyệt, đừng dùng thật.
+**Cách B: Firestore** (`provider: "firebase"`)
+1. **Build, Firestore Database, Create database**, chọn **production mode**.
+2. Tab **Rules**: dán toàn bộ nội dung file `firestore.rules`, bấm **Publish**.
+3. Trong `data.js` điền `apiKey`, `authDomain`, `projectId`, `appId` (Project settings, Your apps, biểu tượng web `</>`).
 
-## Xem thử trên máy
-
-Mở thẳng `index.html`, hoặc chạy:
+**Sau khi chọn A hoặc B:**
+5. Commit và push (đây là lần cuối bạn cần push để dùng trang, trừ khi sửa code).
+7. Tạo mã bí mật (một lần), ví dụ bằng PowerShell:
 
 ```powershell
-python -m http.server 8123
+-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
 ```
 
-rồi vào http://localhost:8123
+8. Mở `https://khuathuythuan-code.github.io/game-progress/?k=<mã>` trên máy bạn. **Lần đầu**, cơ sở dữ liệu
+   còn trống nên trang tự nạp dữ liệu mẫu từ `data.js` làm điểm bắt đầu. Sau đó gửi sếp đúng link có mã đó.
 
-## Deploy miễn phí (khuyến nghị Cloudflare Pages)
+Chưa điền cấu hình Firebase (`provider: ""`) thì trang hiện dữ liệu mẫu và mọi chỉnh sửa chỉ nằm trên
+trình duyệt này.
 
-### Cách 1 — Cloudflare Pages (cho phép dùng thương mại, repo private được)
-1. Đẩy thư mục này lên một repo GitHub.
-2. Vào dash.cloudflare.com → Workers & Pages → Create → Pages → Connect to Git.
-3. Chọn repo. Build command: để trống. Output directory: `/` (thư mục gốc).
-4. Deploy. Từ đó mỗi lần `git push` trang sẽ tự cập nhật sau ~30 giây.
+## Dùng hằng ngày
+- **Chỉnh sửa**: nút ở góc phải thanh trên cùng. Thanh dưới cho biết "Đang lưu…" / "Đã lưu lúc …".
+  - **Chữ**: bấm vào tên game, thể loại, nền tảng, ghi chú, mô tả, từng việc, chú thích ảnh (ô viền nét đứt)
+    và gõ. Rời ô là tự lưu. Enter để xong (riêng mô tả, Enter xuống dòng).
+  - **Ảnh**: **Thay ảnh** / **Xóa** trên mỗi ảnh, **+ Thêm ảnh** ở cuối dải ảnh. Ảnh tự thu nhỏ (tối đa 1280px)
+    và nén cho tới khi đủ nhẹ.
+  - **Tài liệu tham khảo**: sửa tên và địa chỉ, **+ Thêm tài liệu**, ✕ để xóa.
+  - **Việc cần làm**: tích xong, thêm, xóa, sửa chữ. **Tiến độ**: thanh kéo %.
+  - **Thêm game**: nút **+ Thêm game vào "…"** cuối mỗi mục. **Xóa game**: nút ✕.
+  - **Chuyển game sang mục khác**: ở đầu mỗi game, kéo nút **⠿ Kéo** thả vào mục khác, hoặc chọn mục ở
+    ô bên phải (dùng cho điện thoại). Sang "Hoàn thành" thì tiến độ thành 100%, sang "Dự kiến" thì về 0%.
+  - Mọi thao tác xóa/chuyển có nút **Hoàn tác** trong 7 giây.
+- **Xem**: mặc định gọn, không có nút sửa/xóa. Sếp thấy thay đổi của bạn ngay, không cần tải lại trang.
+- **Lọc game**: ô tìm kiếm (gõ không dấu vẫn tìm được), lọc theo mục và theo thể loại.
+- **Nhận xét và chat**: rê chuột vào bất kỳ phần nào (ảnh, tiến độ, mô tả, từng việc, từng link) rồi bấm
+  **Nhận xét**. Trên điện thoại, bấm nút **Nhận xét** ở thanh trên rồi chạm vào phần cần nhận xét.
+  Tin nhắn hiện tức thì cho cả hai bên, mỗi game có khung **Trao đổi** ở cuối.
+- **Xóa hoặc ẩn nhận xét**: mỗi tin có nút **Đã giải quyết** (ẩn tin đi, bấm "Hiện n nhận xét đã giải quyết"
+  để xem lại, hoặc **Mở lại**) và nút **Xóa**. Người viết tin được dùng cả hai nút trên tin của mình; chủ trang
+  (khi đang **Chỉnh sửa**) dùng được trên mọi tin. Số nhận xét hiển thị chỉ đếm tin chưa giải quyết.
+- **Phiên bản của từng game**: mỗi game có ô chọn **Phiên bản** (bản mới nhất ghi `(latest)`) kèm khung **Bản vá**
+  (ghi chú thay đổi, sửa lỗi). Chọn một bản cũ để xem đầy đủ thông tin lúc làm bản đó (mô tả, tiến độ, ảnh, việc,
+  tài liệu, bản vá), bấm **Xem bản mới nhất** để quay lại. Bản cũ chỉ để xem, trừ ghi chú bản vá và số phiên bản
+  sửa được khi đang Chỉnh sửa.
+  - **Tạo phiên bản mới**: khi đang Chỉnh sửa, bấm **+ Tạo phiên bản mới** ở game, nhập số phiên bản (trang gợi ý
+    số tiếp theo) và ghi chú bản vá. Thông tin hiện tại của bản trước được **lưu lại nguyên trạng**, rồi bản mới
+    tiếp tục từ thông tin đó. Nhớ tạo bản mới *trước khi* bắt đầu sửa cho bản tiếp theo.
+  - Nút **Xóa phiên bản** (có Hoàn tác). Ảnh đã bỏ khỏi game nhưng còn thuộc một bản cũ vẫn được giữ lại để bản cũ
+    hiện đủ ảnh. Sao lưu và nhập lại cũng gồm phiên bản.
+  - Phiên bản cần kết nối cơ sở dữ liệu mới tạo được.
+- **Email báo cho bạn**: khi sếp nhắn, email báo về cho bạn (qua Web3Forms, cấu hình ở `notify` trong
+  `data.js`). Tin bạn nhắn không gửi email. Chưa có email nào gửi cho sếp.
+- **Sao lưu**: nút **Tải bản sao lưu** (file JSON kèm ảnh) và **Nhập bản sao lưu** ở thanh dưới khi đang
+  chỉnh sửa. **Nhập sẽ thay toàn bộ nội dung hiện tại.** Không có lịch sử git cho nội dung, nên hãy
+  tải bản sao lưu định kỳ.
 
-### Cách 2 — GitHub Pages (chỉ miễn phí với repo public)
-1. Đẩy lên repo GitHub public.
-2. Settings → Pages → Source: Deploy from a branch → `main` / `/ (root)`.
-3. Link có dạng `https://<tên-user>.github.io/<tên-repo>/`.
+## Giới hạn cần biết
+- Ảnh nằm trong cơ sở dữ liệu nên mỗi ảnh được nén còn khoảng 100 đến 300KB; Firestore giới hạn 1MB mỗi tài liệu.
+  Số lượng ảnh nhiều thì trang tải chậm hơn. Ảnh cũ chỉ còn thuộc phiên bản cũ vẫn chiếm chỗ trong cơ sở dữ liệu.
+- Nhớ dán lại nội dung mới của file quy tắc (`database.rules.json` hoặc `firestore.rules`) vào Firebase (tab Rules,
+  Publish) mỗi khi file này đổi. Lần cập nhật này thêm quy tắc cho phiên bản và cho việc đánh dấu "đã giải quyết".
+- Hai người sửa cùng một game cùng lúc thì lần lưu sau ghi đè lần trước (ở mức từng game).
+- Đang gõ trong một ô thì thay đổi từ máy khác được hoãn tới khi bạn rời ô, để không mất chữ đang gõ.
+- Gói miễn phí Firebase (Spark) có giới hạn lượt đọc/ghi mỗi ngày, rất dư cho hai người dùng. Xem trên
+  trang Firebase để biết hạn mức hiện tại.
 
-### Cập nhật sau này
+## Cập nhật code (hiếm khi cần)
+Chỉ khi sửa `app.js`, `style.css`, `index.html`: commit và push, GitHub Pages tự deploy sau khoảng 1 phút.
+
 ```powershell
 git add .
-git commit -m "Cập nhật tiến độ"
+```
+
+```powershell
+git commit -m "Cập nhật code"
+```
+
+```powershell
 git push
 ```
+
+Nội dung (chữ, ảnh, tiến độ) thì **không** cần các lệnh này.

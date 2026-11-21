@@ -291,7 +291,13 @@ h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
 .editbar strong { color: var(--text); }
 .editbar code { background: var(--bg); padding: 0 5px; border-radius: 4px; }
 .editbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.editbar .dirty { display: inline-block; margin-left: 6px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--dev) 16%, transparent); color: var(--dev); font-weight: 600; }
+.editbar .dirty { display: inline-block; margin-left: 6px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--done) 16%, transparent); color: var(--done); font-weight: 600; }
+.editbar .dirty.err { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.gate { max-width: 520px; margin: 56px auto; padding: 28px 24px; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.gate h2 { margin: 0 0 8px; font-size: 1.3rem; }
+.gate p { margin: 0; color: var(--muted); }
+.gate code { background: var(--bg); padding: 0 6px; border-radius: 4px; }
+body.gated .top-edit, body.gated .filterwrap, body.gated .to-top { display: none !important; }
 body.editing { padding-bottom: 110px; }
 body.editing .send-pill, body.editing .to-top { bottom: 120px; }
 body.editing .toast { bottom: 130px; }
@@ -361,7 +367,32 @@ body.dragging .drop-hint { display: block; }
 .gh-dialog ol { padding-left: 20px; margin: 8px 0 14px; }
 .gh-dialog a { color: var(--accent); word-break: break-all; }
 .gh-dialog input { width: 100%; padding: 9px 12px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+.gh-dialog label { display: block; margin: 12px 0 4px; font-size: .9rem; font-weight: 600; }
+.gh-dialog textarea { width: 100%; padding: 9px 12px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; resize: vertical; }
 .gh-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+/* ---------- Nhận xét đã giải quyết ---------- */
+.msg.resolved .bubble { opacity: .6; border-style: dashed; }
+.msg.resolved .msg-meta b { color: var(--muted); }
+.badge.ok { color: var(--done); border-color: color-mix(in srgb, var(--done) 45%, var(--border)); }
+.show-resolved { margin: 2px 0 10px; text-decoration: none; color: var(--accent); }
+.show-resolved:hover { text-decoration: underline; color: var(--accent); }
+.resolved-list { margin-bottom: 14px; }
+
+/* ---------- Phiên bản ---------- */
+.verbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 4px 20px 10px; }
+.ver-label { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--muted); }
+.ver-select { min-height: 36px; padding: 4px 10px; font: inherit; font-size: .92rem; font-weight: 600; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.ver-none { font-size: .9rem; color: var(--muted); }
+.ver-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0 20px 12px; padding: 10px 14px; background: color-mix(in srgb, var(--dev) 11%, var(--surface)); border: 1px solid color-mix(in srgb, var(--dev) 40%, var(--border)); border-radius: 10px; font-size: .92rem; }
+.ver-notes { padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 8px; }
+.ver-notes h4 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 6px; }
+.ver-notes time { font-weight: 400; font-size: .85rem; color: var(--muted); }
+.ver-name { font-weight: 800; }
+.ver-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .95rem; }
+.ver-text.none { color: var(--muted); }
+.badge.latest { color: var(--accent-ink); background: var(--c); border-color: var(--c); font-weight: 600; }
+.game.hist { border-top-style: dashed; }
 .gh-forget { margin: 12px 0 0; }
 
 /* ---------- Phóng to ảnh ---------- */

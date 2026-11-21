@@ -50,33 +50,28 @@
   </button>
 
   <div class="editbar" id="editbar" hidden>
-    <p><strong>Đang chỉnh sửa.</strong> Sửa chữ, ảnh, link ngay trên trang, kéo game sang mục khác bằng nút ⠿. Bấm <strong>Lưu lên web</strong> để mọi người thấy.
-      <span class="dirty" id="dirty" hidden>Có thay đổi chưa lưu.</span></p>
+    <p><strong>Đang chỉnh sửa.</strong> Sửa chữ, ảnh, link ngay trên trang, kéo game sang mục khác bằng nút ⠿. Thay đổi <strong>tự lưu</strong> và mọi người thấy ngay.
+      <span class="dirty" id="dirty" role="status" aria-live="polite" hidden></span></p>
     <div class="editbar-actions">
-      <button class="btn" id="save-web" type="button">Lưu lên web</button>
-      <button class="btn ghost" id="export" type="button">Sao chép dữ liệu</button>
-      <button class="btn ghost" id="reset" type="button">Bỏ thay đổi</button>
-      <button class="btn ghost" id="exit-edit" type="button">Xong</button>
+      <button class="btn ghost" id="export" type="button">Tải bản sao lưu</button>
+      <button class="btn ghost" id="import" type="button">Nhập bản sao lưu</button>
+      <button class="btn" id="exit-edit" type="button">Xong</button>
     </div>
+    <input type="file" id="import-file" accept="application/json,.json" hidden>
   </div>
 
-  <dialog class="gh-dialog" id="gh-dialog" aria-labelledby="gh-title">
+  <dialog class="gh-dialog" id="ver-dialog" aria-labelledby="ver-title">
     <form method="dialog">
-      <h2 id="gh-title">Kết nối GitHub để lưu</h2>
-      <p>Dán <strong>token GitHub</strong> của bạn. Token chỉ lưu trên trình duyệt này, không nằm trong code hay repo.</p>
-      <ol>
-        <li>Mở <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">github.com/settings/personal-access-tokens/new</a>.</li>
-        <li>Repository access: <em>Only select repositories</em>, chọn repo <code>game-progress</code>.</li>
-        <li>Permissions, Repository permissions: <strong>Contents = Read and write</strong>.</li>
-        <li>Đặt hạn dùng (ví dụ 90 ngày), tạo token và dán vào đây.</li>
-      </ol>
-      <label class="sr-only" for="gh-token">Token GitHub</label>
-      <input id="gh-token" type="password" autocomplete="off" placeholder="github_pat_…">
+      <h2 id="ver-title">Tạo phiên bản mới</h2>
+      <p>Game: <strong id="ver-game"></strong>. Thông tin hiện tại của phiên bản trước sẽ được lưu lại nguyên trạng để xem sau.</p>
+      <label for="ver-num">Số phiên bản</label>
+      <input id="ver-num" type="text" maxlength="40" placeholder="Ví dụ v0.7" autocomplete="off">
+      <label for="ver-notes">Bản vá, thay đổi (không bắt buộc)</label>
+      <textarea id="ver-notes" rows="5" maxlength="2000" placeholder="- Thêm …&#10;- Sửa lỗi …"></textarea>
       <div class="gh-actions">
-        <button class="btn" id="gh-ok" type="submit">Lưu và tiếp tục</button>
-        <button class="btn ghost" id="gh-cancel" type="button">Hủy</button>
+        <button class="btn" id="ver-ok" type="submit">Tạo phiên bản</button>
+        <button class="btn ghost" id="ver-cancel" type="button">Hủy</button>
       </div>
-      <p class="gh-forget"><button class="link-btn" id="gh-forget" type="button">Xóa token đã lưu trên trình duyệt này</button></p>
     </form>
   </dialog>
 

@@ -2,27 +2,89 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Chat chỉ nằm trong rooms/{mã-bí-mật}/messages. Mã phải dài (>= 20 ký tự) và không ai
-    // liệt kê được danh sách rooms, nên chỉ người có link chứa mã mới đọc/ghi được.
-    match /rooms/{room}/messages/{msg} {
-      allow read: if room.size() >= 20;
+    // Mọi dữ liệu nằm dưới rooms/{mã-bí-mật}/. Mã phải dài (>= 20 ký tự) và không ai liệt kê được
+    // danh sách rooms, nên chỉ người có link chứa mã mới đọc/ghi được. Không có đăng nhập.
+    match /rooms/{room} {
 
-      allow create: if room.size() >= 20
-        && request.resource.data.keys().hasOnly(['gid', 'tid', 'tlabel', 'author', 'text', 'ts', 'cid'])
-        && request.resource.data.keys().hasAll(['gid', 'author', 'text', 'ts', 'cid'])
-        && request.resource.data.gid is string && request.resource.data.gid.size() <= 80
-        && request.resource.data.author is string
-        && request.resource.data.author.size() > 0 && request.resource.data.author.size() <= 40
-        && request.resource.data.text is string
-        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 600
-        && request.resource.data.ts is number
-        && request.resource.data.cid is string && request.resource.data.cid.size() <= 40
-        && (!('tid' in request.resource.data) || (request.resource.data.tid is string && request.resource.data.tid.size() <= 200))
-        && (!('tlabel' in request.resource.data) || (request.resource.data.tlabel is string && request.resource.data.tlabel.size() <= 200));
+      // Chat: tin nhắn
+      match /messages/{msg} {
+        allow read: if room.size() >= 20;
+        allow create: if room.size() >= 20
+          && request.resource.data.keys().hasOnly(['gid', 'tid', 'tlabel', 'author', 'text', 'ts', 'cid'])
+          && request.resource.data.keys().hasAll(['gid', 'author', 'text', 'ts', 'cid'])
+          && request.resource.data.gid is string && request.resource.data.gid.size() <= 80
+          && request.resource.data.author is string
+          && request.resource.data.author.size() > 0 && request.resource.data.author.size() <= 40
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 600
+          && request.resource.data.ts is number
+          && request.resource.data.cid is string && request.resource.data.cid.size() <= 40
+          && (!('tid' in request.resource.data) || (request.resource.data.tid is string && request.resource.data.tid.size() <= 200))
+          && (!('tlabel' in request.resource.data) || (request.resource.data.tlabel is string && request.resource.data.tlabel.size() <= 200));
+        allow delete: if room.size() >= 20;
+        // Chỉ được đổi trạng thái "đã giải quyết", không sửa nội dung tin đã gửi
+        allow update: if room.size() >= 20
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved'])
+          && request.resource.data.resolved is bool;
+      }
 
-      // Xóa được (để dọn tin hoặc hoàn tác); không sửa nội dung tin đã gửi.
-      allow delete: if room.size() >= 20;
-      allow update: if false;
+      // Thông tin chung của trang (tiêu đề, ngày cập nhật, danh sách mục)
+      match /content/{doc} {
+        allow read: if room.size() >= 20;
+        allow create, update: if room.size() >= 20
+          && request.resource.data.keys().hasOnly(['title', 'updated', 'sections'])
+          && request.resource.data.title is string && request.resource.data.title.size() <= 200
+          && request.resource.data.updated is string && request.resource.data.updated.size() <= 40
+          && request.resource.data.sections is list && request.resource.data.sections.size() <= 10;
+        allow delete: if room.size() >= 20;
+      }
+
+      // Mỗi game một tài liệu
+      match /games/{gid} {
+        allow read: if room.size() >= 20;
+        allow create, update: if room.size() >= 20
+          && request.resource.data.keys().hasOnly(['sec', 'order', 'name', 'genre', 'platform', 'meta', 'description', 'progress', 'links', 'tasks'])
+          && request.resource.data.sec is string && request.resource.data.sec.size() <= 40
+          && request.resource.data.order is number
+          && request.resource.data.name is string && request.resource.data.name.size() <= 200
+          && request.resource.data.genre is string && request.resource.data.genre.size() <= 100
+          && request.resource.data.platform is string && request.resource.data.platform.size() <= 100
+          && request.resource.data.meta is string && request.resource.data.meta.size() <= 200
+          && request.resource.data.description is string && request.resource.data.description.size() <= 5000
+          && request.resource.data.progress is number
+          && request.resource.data.links is list && request.resource.data.links.size() <= 50
+          && request.resource.data.tasks is list && request.resource.data.tasks.size() <= 300;
+        allow delete: if room.size() >= 20;
+      }
+
+      // Mỗi ảnh một tài liệu (ảnh đã nén nhỏ, lưu dạng chuỗi data:image/jpeg;base64,...).
+      // Một tài liệu Firestore tối đa 1 MiB nên src giới hạn 700.000 ký tự.
+      match /images/{iid} {
+        allow read: if room.size() >= 20;
+        allow create, update: if room.size() >= 20
+          && request.resource.data.keys().hasOnly(['gid', 'order', 'caption', 'src', 'retired'])
+          && request.resource.data.gid is string && request.resource.data.gid.size() <= 80
+          && request.resource.data.order is number
+          && request.resource.data.caption is string && request.resource.data.caption.size() <= 300
+          && request.resource.data.src is string && request.resource.data.src.size() <= 700000
+          && (!('retired' in request.resource.data) || request.resource.data.retired is bool);
+        allow delete: if room.size() >= 20;
+      }
+
+      // Phiên bản của game: số phiên bản, ngày, ghi chú bản vá, và bản chụp thông tin game lúc đó (snap).
+      // Ảnh trong bản chụp chỉ tham chiếu tới tài liệu ảnh (không chép lại nội dung ảnh).
+      match /versions/{vid} {
+        allow read: if room.size() >= 20;
+        allow create, update: if room.size() >= 20
+          && request.resource.data.keys().hasOnly(['gid', 'order', 'version', 'date', 'notes', 'snap'])
+          && request.resource.data.gid is string && request.resource.data.gid.size() <= 80
+          && request.resource.data.order is number
+          && request.resource.data.version is string && request.resource.data.version.size() <= 60
+          && request.resource.data.date is string && request.resource.data.date.size() <= 40
+          && request.resource.data.notes is string && request.resource.data.notes.size() <= 5000
+          && (request.resource.data.snap == null || request.resource.data.snap is map);
+        allow delete: if room.size() >= 20;
+      }
     }
   }
 }

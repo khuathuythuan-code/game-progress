@@ -10,17 +10,20 @@
   // fields/links/images/moved/newGames/taskText là sửa trực tiếp trên trang, các mục còn lại như cũ.
   const EMPTY = () => ({
     delGames: [], delTasks: [], done: {}, added: {}, comments: {}, delComments: [], progress: {},
-    fields: {}, links: {}, images: {}, moved: {}, newGames: [], taskText: {}
+    fields: {}, links: {}, images: {}, moved: {}, newGames: [], taskText: {}, versions: {}
   });
   const canHover = () => matchMedia("(hover: hover)").matches;
   const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // ---------- Chat dùng chung (Firebase) ----------
-  // CHAT.provider: "" = tắt (nhận xét lưu trên máy người viết + email), "firebase" = chat thật,
-  // "local" = chat thử giữa các tab cùng trình duyệt (chỉ để thử giao diện).
-  const CHAT = DATA.chat || {};
-  // Chưa điền cấu hình Firebase thì coi như chưa bật chat, trang chạy ở chế độ nhận xét + email
-  const chatOn = !!CHAT.provider && (CHAT.provider !== "firebase" || !!(CHAT.firebase && CHAT.firebase.projectId));
+  // ---------- Cơ sở dữ liệu dùng chung (Firebase): nội dung trang + chat ----------
+  // CHAT.provider: "" = chưa kết nối (hiện dữ liệu mẫu, sửa chỉ nằm trên trình duyệt này),
+  // "firebase" = dùng thật, "local" = thử giữa các tab cùng trình duyệt (chỉ để thử giao diện).
+  const CHAT = DATA.db || DATA.chat || {};
+  // Chưa điền cấu hình Firebase thì coi như chưa kết nối
+  const chatOn = !!CHAT.provider && (
+    CHAT.provider === "local" ||
+    (CHAT.provider === "firebase" && !!(CHAT.firebase && CHAT.firebase.projectId)) ||        // Firestore
+    (CHAT.provider === "rtdb" && !!(CHAT.firebase && CHAT.firebase.databaseURL)));            // Realtime Database
   const ROOM_KEY = "game-progress-room";
   const OWNER_KEY = "game-progress-owner";
   const CID_KEY = "game-progress-cid";
@@ -49,24 +52,33 @@
     return EMPTY();
   }
   let warnedQuota = false;
-  function save() {
+  function persist() { // ghi bản nháp vào trình duyệt (không kích hoạt lưu lên cơ sở dữ liệu)
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {
-      if (!warnedQuota) { warnedQuota = true; toast('Bộ nhớ trình duyệt đầy (thường do ảnh lớn). Hãy bấm "Lưu lên web" ngay.'); }
+      if (!warnedQuota) { warnedQuota = true; toast("Bộ nhớ trình duyệt đầy (thường do ảnh lớn). Thay đổi vẫn đang được lưu lên cơ sở dữ liệu."); }
     }
+  }
+  function save() { // mọi chỉnh sửa gọi hàm này: ghi nháp rồi tự động lưu lên cơ sở dữ liệu
+    persist();
+    if (chatOn && room) scheduleSync();
   }
   const isDirty = () => {
     const s = state;
     return !!(s.delGames.length || s.delTasks.length || s.delComments.length || s.newGames.length ||
       Object.keys(s.done).length || Object.keys(s.added).length || Object.keys(s.progress).length ||
       Object.keys(s.comments).length || Object.keys(s.fields).length || Object.keys(s.links).length ||
-      Object.keys(s.images).length || Object.keys(s.moved).length || Object.keys(s.taskText).length);
+      Object.keys(s.images).length || Object.keys(s.moved).length || Object.keys(s.taskText).length ||
+      Object.keys(s.versions).length);
   };
 
   // Dữ liệu gốc (như trong data.js) và dữ liệu hiệu lực = gốc + chỉnh sửa trực tiếp chưa lưu.
   // DATA.sections luôn là dữ liệu hiệu lực để phần còn lại của mã dùng thẳng.
-  let BASE = { sections: JSON.parse(JSON.stringify(DATA.sections)) };
+  // SEED = dữ liệu mẫu trong data.js, chỉ dùng để nạp lần đầu vào cơ sở dữ liệu trống.
+  // Khi đã kết nối cơ sở dữ liệu thì dữ liệu gốc bắt đầu rỗng và chỉ lấy từ cơ sở dữ liệu.
+  const SEED = JSON.parse(JSON.stringify(DATA.sections));
+  let BASE = { sections: chatOn ? [] : JSON.parse(JSON.stringify(SEED)) };
   function rebuild() {
     const secs = JSON.parse(JSON.stringify(BASE.sections));
+    if (!secs.length) { DATA.sections = secs; return; }
     state.newGames.forEach((n) => {
       if (secs.some((s) => s.games.some((g) => g.id === n.game.id))) return;
       (secs.find((s) => s.key === n.sec) || secs[0]).games.push(JSON.parse(JSON.stringify(n.game)));
@@ -80,6 +92,7 @@
       if (state.fields[g.id]) Object.assign(g, state.fields[g.id]);
       if (state.links[g.id]) g.links = state.links[g.id].map((x) => Object.assign({}, x));
       if (state.images[g.id]) g.images = state.images[g.id].map((x) => Object.assign({}, x));
+      if (state.versions[g.id]) g.versions = JSON.parse(JSON.stringify(state.versions[g.id]));
     }));
     DATA.sections = secs;
   }
@@ -88,7 +101,9 @@
   // ---------- Trạng thái giao diện ----------
   const ui = {
     editing: false, collapsed: {}, drafts: {}, name: "", pop: null, incoming: null, annotating: false,
-    filter: { q: "", sec: "all", genre: "" }, dragging: ""
+    filter: { q: "", sec: "all", genre: "" }, dragging: "",
+    viewVersion: {},   // game id → id phiên bản cũ đang xem (không có = xem bản mới nhất)
+    showResolved: {}   // khóa → có đang hiện các nhận xét đã giải quyết không
   };
   try {
     if (/[?&]edit(=1|=true)?(&|$)/.test(location.search)) localStorage.setItem(MODE_KEY, "1");
@@ -137,6 +152,7 @@
     const extra = chatOn ?
       remote.filter((m) => m.gid === g.id && !ids.has(m.id)).map((m) => ({
         id: m.id, author: m.author, text: m.text, time: new Date(m.ts).toISOString(), mine: m.cid === myCid, remote: true,
+        resolved: !!m.resolved,
         target: m.tid ? { id: m.tid, label: m.tlabel || "" } : undefined
       })) :
       (state.comments[g.id] || []).filter((c) => !ids.has(c.id)).map((c) => Object.assign({}, c, { mine: true }));
@@ -144,7 +160,8 @@
   }
   function targetCounts(g) {
     const m = {};
-    allComments(g).forEach((c) => { if (c.target && c.target.id) m[c.target.id] = (m[c.target.id] || 0) + 1; });
+    // chỉ đếm nhận xét chưa giải quyết
+    allComments(g).forEach((c) => { if (!c.resolved && c.target && c.target.id) m[c.target.id] = (m[c.target.id] || 0) + 1; });
     return m;
   }
   function findGame(id) {
@@ -192,18 +209,38 @@
   }
 
   function renderMsg(g, c, withTag) {
-    const canDel = c.mine || ui.editing;
-    return '<li class="msg' + (c.mine ? " mine" : "") + '"><div class="msg-meta"><b>' + esc(c.author) + "</b><time>" + esc(fmtTime(c.time)) + "</time>" +
-      (canDel ? '<button class="link-btn" data-action="del-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" aria-label="Xóa nhận xét của ' + esc(c.author) + '">Xóa</button>' : "") + "</div>" +
+    // Người viết, hoặc chủ trang khi đang chỉnh sửa, được xóa hoặc đánh dấu "đã giải quyết" (ẩn đi)
+    const canAct = c.mine || ui.editing;
+    const canResolve = canAct && (c.remote || c.mine);
+    return '<li class="msg' + (c.mine ? " mine" : "") + (c.resolved ? " resolved" : "") + '"><div class="msg-meta"><b>' + esc(c.author) + "</b><time>" + esc(fmtTime(c.time)) + "</time>" +
+      (c.resolved ? '<span class="badge ok">✓ Đã giải quyết</span>' : "") +
+      (canResolve ? '<button class="link-btn" data-action="resolve-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" data-to="' + (c.resolved ? "0" : "1") + '">' + (c.resolved ? "Mở lại" : "Đã giải quyết") + "</button>" : "") +
+      (canAct ? '<button class="link-btn" data-action="del-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" aria-label="Xóa nhận xét của ' + esc(c.author) + '">Xóa</button>' : "") + "</div>" +
       (withTag && c.target ? '<a class="ctag" href="#' + esc(c.target.id) + '" data-action="goto-target" data-id="' + esc(c.target.id) + '">về: ' + esc(c.target.label) + "</a>" : "") +
       '<p class="bubble">' + esc(c.text) + "</p></li>";
+  }
+
+  // Danh sách tin: chưa giải quyết hiện sẵn, đã giải quyết bị ẩn (bấm để hiện lại)
+  function threadList(g, list, key, withTag, cls) {
+    const open = list.filter((c) => !c.resolved), done = list.filter((c) => c.resolved);
+    const shown = !!ui.showResolved[key];
+    const li = (c) => renderMsg(g, c, withTag);
+    return {
+      open: open, done: done,
+      html: (open.length ? '<ul class="thread' + cls + '">' + open.map(li).join("") + "</ul>" : "") +
+        (done.length ? '<button type="button" class="link-btn show-resolved" data-action="toggle-resolved" data-key="' + esc(key) + '" aria-expanded="' + shown + '">' +
+          (shown ? "Ẩn " : "Hiện ") + done.length + " nhận xét đã giải quyết</button>" : "") +
+        (done.length && shown ? '<ul class="thread resolved-list' + cls + '">' + done.map(li).join("") + "</ul>" : "")
+    };
   }
 
   // Phần tiêu đề + danh sách tin nhắn của một game (tách riêng để cập nhật mà không đụng vào ô đang gõ)
   function threadHtml(g) {
     const list = allComments(g);
-    return "<h4>" + (chatOn ? "Trao đổi" : "Nhận xét") + (list.length ? " (" + list.length + ")" : "") + "</h4>" +
-      (list.length ? '<ul class="thread">' + list.map((c) => renderMsg(g, c, true)).join("") + "</ul>" :
+    const t = threadList(g, list, g.id, true, "");
+    return "<h4>" + (chatOn ? "Trao đổi" : "Nhận xét") + (t.open.length ? " (" + t.open.length + ")" : "") + "</h4>" +
+      (list.length ?
+        (!t.open.length ? '<p class="no-comments">Mọi nhận xét đã được giải quyết.</p>' : "") + t.html :
         '<p class="no-comments">' + (canComment ? "Chưa có tin nhắn. Rê chuột vào ảnh, tiến độ hay một mục bất kỳ để nhận xét đúng chỗ, hoặc viết chung ở dưới." : "Chưa có nhận xét.") + "</p>") +
       (!canComment ? '<p class="no-comments">Muốn nhận xét, hãy mở trang bằng link do người làm gửi cho bạn.</p>' : "");
   }
@@ -222,14 +259,110 @@
       "</form></section>");
   }
 
+  // ---------- Phiên bản của từng game ----------
+  // g.versions = [{ id, version, date, notes, snap }] từ cũ đến mới. Bản mới nhất (latest) luôn là dữ liệu hiện tại
+  // của game; khi tạo bản mới, bản cũ nhất được "đóng băng" thành snap = ảnh chụp thông tin lúc đó.
+  const versionsOf = (g) => JSON.parse(JSON.stringify(g.versions || []));
+  const isDataUrl = (s) => /^data:/.test(s || "");
+  const todayStr = () => { const d = new Date(); return pad(d.getDate()) + "/" + pad(d.getMonth() + 1) + "/" + d.getFullYear(); };
+  const nextVersion = (prev) => {
+    if (!prev) return "v1.0";
+    const m = String(prev).match(/^(.*?)(\d+)(\D*)$/);
+    return m ? m[1] + (Number(m[2]) + 1) + m[3] : prev + ".1";
+  };
+  let imgIndex = {}; // iid → nội dung ảnh (gồm cả ảnh đã bỏ khỏi game nhưng còn thuộc phiên bản cũ)
+  function imgSrc(iid) {
+    if (imgIndex[iid]) return imgIndex[iid];
+    for (const s of DATA.sections) for (const g of s.games) for (const im of g.images || []) if (im.iid === iid) return im.src;
+    return "";
+  }
+  const snapImages = (snap) => (snap.images || []).map((im) => ({ src: im.src || imgSrc(im.iid), caption: im.caption || "" })).filter((im) => im.src);
+  function snapOf(g) { // ảnh chụp toàn bộ thông tin game ở thời điểm hiện tại
+    const sec = DATA.sections.find((s) => s.games.some((x) => x.id === g.id));
+    return {
+      sec: sec ? sec.key : "dev", name: g.name, genre: g.genre, platform: g.platform, meta: g.meta || "", description: g.description,
+      progress: prog(g),
+      links: (g.links || []).map((l) => ({ title: l.title || "", url: l.url || "" })),
+      tasks: visibleTasks(g).map((t) => ({ id: String(t.id), text: t.text, done: isDone(t) })),
+      images: (g.images || []).map((im) => {
+        const o = { caption: im.caption || "" };
+        if (im.iid) o.iid = im.iid;
+        if (!(chatOn && isDataUrl(im.src))) o.src = im.src; // ảnh lớn đã nằm trong cơ sở dữ liệu thì chỉ ghi tham chiếu
+        return o;
+      })
+    };
+  }
+
+  function renderVerBar(g, vers, viewingId) {
+    const canCreate = ui.editing && chatOn && !!room;
+    if (!vers.length && !canCreate) return "";
+    const latest = vers[vers.length - 1];
+    const cur = viewingId || (latest && latest.id);
+    const opts = vers.slice().reverse().map((v) => '<option value="' + esc(v.id) + '"' + (v.id === cur ? " selected" : "") + ">" +
+      esc(v.version) + (v === latest ? " (latest)" : "") + (v.date ? " · " + esc(v.date) : "") + "</option>").join("");
+    return '<div class="verbar">' +
+      (vers.length ? '<label class="ver-label">Phiên bản <select class="ver-select" data-action="ver-select" data-game="' + esc(g.id) + '">' + opts + "</select></label>" :
+        '<span class="ver-none">Chưa có phiên bản nào.</span>') +
+      (canCreate ? '<button type="button" class="btn small ghost" data-action="ver-new" data-game="' + esc(g.id) + '">+ Tạo phiên bản mới</button>' : "") + "</div>";
+  }
+  function renderVerNotes(g, v, isLatest) {
+    const x = ' data-game="' + esc(g.id) + '"';
+    const name = ui.editing ? ed("ver", v.id, "version", v.version, "span", "ver-name", false, "Số phiên bản", "Số phiên bản", x) : '<span class="ver-name">' + esc(v.version) + "</span>";
+    const notes = ui.editing ?
+      ed("ver", v.id, "notes", v.notes || "", "div", "ver-text", true, "Ghi chú bản vá của phiên bản này", "Bản vá và thay đổi của phiên bản này…", x) :
+      (v.notes ? '<div class="ver-text">' + esc(v.notes) + "</div>" : '<div class="ver-text none">Chưa có ghi chú cho phiên bản này.</div>');
+    return '<section class="ver-notes"><h4>Bản vá ' + name + (isLatest ? ' <span class="badge latest">latest</span>' : "") +
+      (v.date ? " <time>" + esc(v.date) + "</time>" : "") +
+      (ui.editing ? ' <button type="button" class="link-btn" data-action="ver-del" data-game="' + esc(g.id) + '" data-id="' + esc(v.id) + '">Xóa phiên bản</button>' : "") +
+      "</h4>" + notes + "</section>";
+  }
+  // Xem một phiên bản cũ: hiện đúng thông tin lúc làm phiên bản đó (chỉ xem, trừ ghi chú bản vá)
+  function renderHistGame(g, v, vers, nCmt) {
+    const s = v.snap;
+    const open = !ui.collapsed[g.id];
+    const tasks = s.tasks || [];
+    const imgs = snapImages(s);
+    const secT = DATA.sections.find((x) => x.key === s.sec);
+    const facts = '<span class="genre">' + esc(s.genre) + "</span><span>" + esc(s.platform) + "</span>" + (s.meta ? "<span>" + esc(s.meta) + "</span>" : "") +
+      (secT ? "<span>Lúc đó: " + esc(secT.title) + "</span>" : "");
+    const progress = s.sec === "planned" ? "" :
+      '<div class="progress"><div class="progress-top"><span>Tiến độ lúc đó</span><b>' + (s.progress || 0) + "%</b></div>" +
+      '<div class="bar"><i style="width:' + (s.progress || 0) + '%"></i></div></div>';
+    const gallery = imgs.length ? '<div class="gallery-wrap"><div class="gallery" tabindex="0" role="group" aria-label="Ảnh của ' + esc(s.name) + ' ở phiên bản ' + esc(v.version) + '">' +
+      imgs.map((im, i) => '<figure><div class="imgbox"><img loading="lazy" src="' + esc(im.src) + '" alt="' + esc(im.caption || s.name) + '" data-action="zoom" data-game="' + esc(g.id) + '" data-ver="' + esc(v.id) + '" data-index="' + i + '"></div>' +
+        "<figcaption>" + esc(im.caption) + "</figcaption></figure>").join("") + "</div></div>" : "";
+    const taskHtml = tasks.length ? '<ul class="tasks">' + tasks.map((t) => '<li class="task' + (t.done ? " done" : "") + '"><span class="mark" aria-hidden="true">' + (t.done ? "✓" : "") +
+      '</span><span class="task-text">' + esc(t.text) + '</span><span class="sr-only">' + (t.done ? " (đã xong)" : " (chưa xong)") + "</span></li>").join("") + "</ul>" : '<p class="none">Không có việc nào.</p>';
+    const links = s.links || [];
+    const linkHtml = links.length ? '<ul class="links">' + links.map((l) => '<li><a href="' + esc(safeUrl(l.url)) + '" target="_blank" rel="noopener noreferrer">' + esc(l.title) + "</a></li>").join("") + "</ul>" : '<p class="none">Không có tài liệu.</p>';
+    const tools =
+      '<a class="tool' + (nCmt ? " has-count" : "") + '" href="#c-' + esc(g.id) + '" data-action="goto-comments" data-id="' + esc(g.id) + '" aria-label="Nhận xét: ' + nCmt + '">' + ICON_CMT + "<span>" + nCmt + "</span></a>" +
+      '<button class="tool" data-action="collapse" data-id="' + esc(g.id) + '" aria-expanded="' + open + '" aria-controls="m-' + esc(g.id) + '">' + '<span class="tool-label">' + (open ? "Thu gọn" : "Mở rộng") + "</span>" + ICON_CHEV + "</button>";
+    return '<article class="game hist" id="g-' + esc(g.id) + '">' +
+      '<div class="game-head"><div class="game-title"><h3 tabindex="-1">' + esc(s.name) + '</h3><div class="facts">' + facts + '</div></div><div class="game-tools">' + tools + "</div></div>" +
+      renderVerBar(g, vers, v.id) +
+      '<div class="ver-banner" role="status"><span>Đang xem phiên bản <b>' + esc(v.version) + "</b>" + (v.date ? " (" + esc(v.date) + ")" : "") +
+      ". Đây là thông tin lúc làm phiên bản này, chỉ để xem.</span>" +
+      '<button type="button" class="btn small" data-action="ver-latest" data-game="' + esc(g.id) + '">Xem bản mới nhất</button></div>' +
+      progress +
+      '<div class="game-more" id="m-' + esc(g.id) + '"' + (open ? "" : " hidden") + ">" + gallery +
+      '<div class="game-body">' + renderVerNotes(g, v, false) + '<p class="desc">' + esc(s.description) + "</p>" +
+      '<div class="cols"><div><h4>Việc cần làm, xong ' + tasks.filter((t) => t.done).length + "/" + tasks.length + "</h4>" + taskHtml + "</div>" +
+      "<div><h4>Tài liệu tham khảo</h4>" + linkHtml + "</div></div>" + renderComments(g) + "</div></div></article>";
+  }
+
   function renderGame(sec, g) {
     const tasks = visibleTasks(g);
     const doneCount = tasks.filter(isDone).length;
     const planned = sec.key === "planned";
     const p = prog(g);
     const cm = targetCounts(g);
-    const nCmt = allComments(g).length;
+    const nCmt = allComments(g).filter((c) => !c.resolved).length; // chỉ đếm nhận xét chưa giải quyết
     const open = !ui.collapsed[g.id];
+    const vers = g.versions || [];
+    const latestV = vers[vers.length - 1] || null;
+    const histV = ui.viewVersion[g.id] ? vers.find((v) => v.id === ui.viewVersion[g.id]) : null;
+    if (histV && histV !== latestV && histV.snap) return renderHistGame(g, histV, vers, nCmt);
 
     const facts = ui.editing ?
       ed("game", g.id, "genre", g.genre, "span", "genre", false, "Thể loại", "Thể loại") +
@@ -293,9 +426,10 @@
 
     return '<article class="game" id="g-' + esc(g.id) + '">' + mover +
       '<div class="game-head"><div class="game-title"' + A(g, "title", "Thông tin game", cm) + ">" + titleHtml + '<div class="facts">' + facts + '</div></div><div class="game-tools">' + tools + "</div></div>" +
+      renderVerBar(g, vers, null) +
       progress +
       '<div class="game-more" id="m-' + esc(g.id) + '"' + (open ? "" : " hidden") + ">" + gallery +
-      '<div class="game-body">' + descHtml +
+      '<div class="game-body">' + (latestV ? renderVerNotes(g, latestV, true) : "") + descHtml +
       '<div class="cols"><div><h4>Việc cần làm, xong ' + doneCount + "/" + tasks.length + "</h4>" + taskHtml + addForm + "</div>" +
       "<div><h4>Tài liệu tham khảo</h4>" + linkHtml + "</div></div>" + renderComments(g) + "</div></div></article>";
   }
@@ -355,11 +489,26 @@
     document.body.classList.toggle("editing", ui.editing);
     document.body.classList.toggle("annotating", ui.annotating);
     $("editbar").hidden = !ui.editing;
-    $("dirty").hidden = !isDirty();
+    updateSaveStatus();
     const modeBtn = $("enter-edit");
     modeBtn.textContent = ui.editing ? "Xong chỉnh sửa" : "Chỉnh sửa";
     modeBtn.setAttribute("aria-pressed", String(ui.editing));
     modeBtn.classList.toggle("on", ui.editing);
+
+    // Đã kết nối cơ sở dữ liệu: cần link riêng mới xem được nội dung; đang tải thì báo đang tải
+    const gated = chatOn && !room;
+    document.body.classList.toggle("gated", gated);
+    if (gated || (chatOn && !contentReady)) {
+      $("board").innerHTML = "";
+      $("tabs").innerHTML = "";
+      $("app").innerHTML = gated ?
+        '<div class="gate"><h2>Trang này cần link riêng</h2><p>Hãy mở trang bằng link do người làm gửi cho bạn (có đuôi <code>?k=…</code>).</p></div>' :
+        dbError ? '<div class="gate" role="alert"><h2>Không tải được dữ liệu</h2><p>' + esc(dbError) + "</p></div>" :
+        '<div class="gate" role="status"><p>Đang tải dữ liệu…</p></div>';
+      renderFilterBar(0, 0);
+      updateSend();
+      return;
+    }
 
     // nhớ vị trí cuộn, ô đang focus, vị trí cuộn của dải ảnh
     const y = window.scrollY;
@@ -512,14 +661,30 @@
   function deleteGame(id) {
     const g = findGame(id);
     if (!g) return;
+    // Giữ một bản sao để hoàn tác được cả khi việc xóa đã kịp lưu lên cơ sở dữ liệu
+    const copy = JSON.parse(JSON.stringify(g));
+    const sec = DATA.sections.find((s) => s.games.some((x) => x.id === id));
     state.delGames.push(id); save(); render();
-    toast('Đã xóa game "' + g.name + '"', () => { state.delGames = state.delGames.filter((x) => x !== id); save(); render(); });
+    toast('Đã xóa game "' + g.name + '"', () => {
+      state.delGames = state.delGames.filter((x) => x !== id);
+      if (!state.newGames.some((n) => n.game.id === id)) state.newGames.push({ sec: sec ? sec.key : "dev", game: copy });
+      save(); render();
+    });
   }
   function deleteTask(id) {
     const t = findTask(id);
     if (!t) return;
+    const owner = DATA.sections.reduce((a, s) => a.concat(s.games), []).find((x) => allTasks(x).some((y) => y.id === id));
+    const copy = { id: t.id, text: t.text, done: isDone(t) };
     state.delTasks.push(id); save(); render();
-    toast("Đã xóa việc", () => { state.delTasks = state.delTasks.filter((x) => x !== id); save(); render(); });
+    toast("Đã xóa việc", () => {
+      state.delTasks = state.delTasks.filter((x) => x !== id);
+      if (owner) {
+        const arr = (state.added[owner.id] = state.added[owner.id] || []);
+        if (!arr.some((x) => x.id === id)) arr.push(copy);
+      }
+      save(); render();
+    });
   }
   function deleteComment(gid, id) {
     if (chatOn) {
@@ -607,12 +772,13 @@
   }
   function popThreadHtml(g, p) {
     const list = allComments(g).filter((c) => c.target && c.target.id === p.id);
-    let items = list.map((c) => renderMsg(g, c, false)).join("");
+    const t = threadList(g, list, "pop:" + p.id, false, " pop-thread");
+    let incoming = "";
     if (ui.incoming && ui.incoming.tid === p.id) {
-      items += '<li class="msg from-link"><div class="msg-meta"><b>' + esc(ui.incoming.a || "Người nhận xét") + "</b><time>" + esc(fmtTime(ui.incoming.t)) +
-        '</time><span class="badge">từ link email</span></div><p class="bubble">' + esc(ui.incoming.m) + "</p></li>";
+      incoming = '<ul class="thread pop-thread"><li class="msg from-link"><div class="msg-meta"><b>' + esc(ui.incoming.a || "Người nhận xét") + "</b><time>" + esc(fmtTime(ui.incoming.t)) +
+        '</time><span class="badge">từ link email</span></div><p class="bubble">' + esc(ui.incoming.m) + "</p></li></ul>";
     }
-    return items ? '<ul class="thread pop-thread">' + items + "</ul>" : "";
+    return t.html + incoming;
   }
   function renderPop() {
     const p = ui.pop;
@@ -835,10 +1001,16 @@
     lb.querySelector("figcaption").textContent = (im.caption || "") + (n > 1 ? "  (" + (lbState.i + 1) + "/" + n + ")" : "");
     lb.querySelector(".lb-prev").hidden = lb.querySelector(".lb-next").hidden = n < 2;
   }
-  function lbOpen(gid, idx, opener) {
+  function lbOpen(gid, idx, opener, verId) {
     const g = findGame(gid);
-    if (!g || !(g.images || []).length) return;
-    lbState.list = g.images; lbState.opener = opener;
+    if (!g) return;
+    let list = g.images || [];
+    if (verId) { // đang xem ảnh của một phiên bản cũ
+      const v = (g.versions || []).find((x) => x.id === verId);
+      list = v && v.snap ? snapImages(v.snap) : [];
+    }
+    if (!list.length) return;
+    lbState.list = list; lbState.opener = opener;
     lbShow(idx);
     lb.hidden = false;
     document.body.style.overflow = "hidden";
@@ -924,7 +1096,15 @@
       const gl = el.parentElement.querySelector(".gallery");
       gl.scrollBy({ left: Number(el.getAttribute("data-dir")) * gl.clientWidth * 0.7, behavior: "smooth" });
     } else if (act === "zoom") {
-      lbOpen(el.getAttribute("data-game"), Number(el.getAttribute("data-index")), el);
+      lbOpen(el.getAttribute("data-game"), Number(el.getAttribute("data-index")), el, el.getAttribute("data-ver"));
+    } else if (act === "resolve-comment") {
+      resolveComment(el.getAttribute("data-game"), id, el.getAttribute("data-to") === "1");
+    } else if (act === "toggle-resolved") {
+      ui.showResolved[el.getAttribute("data-key")] = !ui.showResolved[el.getAttribute("data-key")];
+      softRender();
+    } else if (act === "ver-latest") {
+      delete ui.viewVersion[el.getAttribute("data-game")];
+      render();
     } else if (act === "collapse") {
       setCollapsed(id, !ui.collapsed[id]);
     } else if (act === "toggle-all") {
@@ -1010,15 +1190,7 @@
     }
   });
 
-  // ---------- Khôi phục & xuất dữ liệu ----------
-  $("reset").addEventListener("click", () => {
-    if (!isDirty()) { toast("Không có gì để khôi phục"); return; }
-    if (confirm("Bỏ mọi thay đổi chưa lưu lên web (chữ, ảnh, game, việc, nhận xét) trên trình duyệt này?")) {
-      state = EMPTY();
-      save(); render(); toast("Đã khôi phục");
-    }
-  });
-  // Dữ liệu đầy đủ sau mọi chỉnh sửa (dùng cho "Lưu lên web" và "Sao chép dữ liệu")
+  // ---------- Dữ liệu đầy đủ sau mọi chỉnh sửa (dùng để lưu lên cơ sở dữ liệu và sao lưu) ----------
   function buildExport() {
     const out = JSON.parse(JSON.stringify(DATA));
     const d = new Date();
@@ -1038,15 +1210,132 @@
     });
     return out;
   }
+  function archiveOf(g) {
+    const live = new Set((g.images || []).map((im) => im.iid));
+    const seen = {}, out = [];
+    (g.versions || []).forEach((v) => ((v.snap && v.snap.images) || []).forEach((im) => {
+      if (!im.iid || live.has(im.iid) || seen[im.iid]) return;
+      const src = im.src || imgSrc(im.iid);
+      if (!src) return;
+      seen[im.iid] = true;
+      out.push({ iid: im.iid, src: src, caption: im.caption || "" });
+    }));
+    return out;
+  }
+  // Tải bản sao lưu toàn bộ nội dung (kèm ảnh) về máy dưới dạng file JSON
   $("export").addEventListener("click", () => {
     const out = buildExport();
-    let pending = 0;
-    out.sections.forEach((sec) => sec.games.forEach((g) => (g.images || []).forEach((im) => {
-      if (im.pending) { pending++; im.src = "images/" + im.pending; delete im.pending; }
-    })));
-    copyText("window.PROGRESS = " + JSON.stringify(out, null, 2) + ";\n", (ok) =>
-      toast(!ok ? "Không sao chép được" : pending ? "Đã sao chép, nhưng " + pending + " ảnh mới chưa có file. Hãy dùng Lưu lên web." : "Đã sao chép. Dán đè vào data.js"));
+    const model = { app: "game-progress", version: 1, title: out.title, updated: out.updated,
+      sections: out.sections.map((s) => ({ key: s.key, title: s.title, note: s.note || "", games: s.games.map((g) => ({
+        id: g.id, name: g.name, genre: g.genre, platform: g.platform, meta: g.meta || "", description: g.description,
+        progress: g.progress, links: g.links || [], tasks: g.tasks || [],
+        images: (g.images || []).map((im) => ({ iid: im.iid, src: im.src, caption: im.caption || "" })),
+        versions: (g.versions || []).map((v) => ({ id: v.id, version: v.version, date: v.date, notes: v.notes || "", snap: v.snap || null })),
+        archive: archiveOf(g) // ảnh đã bỏ khỏi game nhưng còn thuộc một phiên bản cũ
+      })) })) };
+    const d = new Date();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(model, null, 2)], { type: "application/json" }));
+    a.download = "tien-do-game-" + d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast("Đã tải bản sao lưu.");
   });
+  // Nhập lại bản sao lưu: thay toàn bộ nội dung hiện tại
+  $("import").addEventListener("click", () => $("import-file").click());
+  $("import-file").addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    f.text().then((txt) => {
+      const m = JSON.parse(txt);
+      if (!m || !Array.isArray(m.sections) || !m.sections.every((s) => s && s.key && Array.isArray(s.games))) throw new Error("bad");
+      if (!confirm("Thay TOÀN BỘ nội dung hiện tại bằng bản sao lưu này? Thao tác này không hoàn tác được.")) return;
+      if (!chatOn || !room) { toast("Cần kết nối cơ sở dữ liệu và mở bằng link riêng để nhập."); return; }
+      importModel(m);
+    }).catch(() => toast("File này không phải bản sao lưu hợp lệ."));
+  });
+
+  // ---------- Đánh dấu nhận xét "đã giải quyết" (ẩn đi, bấm để hiện lại) ----------
+  function resolveComment(gid, id, to) {
+    const done = () => toast(to ? "Đã ẩn nhận xét đã giải quyết" : "Đã mở lại nhận xét", () => resolveComment(gid, id, !to));
+    if (chatOn) {
+      const m = remote.find((x) => x.id === id);
+      if (!m || !chatApi) return;
+      chatApi.patch(id, { resolved: to }).then(done).catch(() => toast("Không cập nhật được nhận xét."));
+      return;
+    }
+    const c = (state.comments[gid] || []).find((x) => x.id === id);
+    if (!c) return;
+    c.resolved = to;
+    save(); render(); done();
+  }
+  document.addEventListener("change", (e) => { // chọn phiên bản để xem
+    const el = e.target;
+    if (!el.matches || !el.matches('[data-action="ver-select"]')) return;
+    const gid = el.getAttribute("data-game"), g = findGame(gid);
+    if (!g) return;
+    const vers = g.versions || [], latest = vers[vers.length - 1];
+    if (!latest || el.value === latest.id) delete ui.viewVersion[gid]; else ui.viewVersion[gid] = el.value;
+    render();
+  });
+
+  // ---------- Tạo / xóa phiên bản ----------
+  async function flushSync() { // chờ mọi thay đổi đã lên cơ sở dữ liệu (để ảnh mới có sẵn trước khi chụp bản lưu)
+    if (!chatOn || !room) return;
+    clearTimeout(syncT);
+    for (let i = 0; i < 40; i++) {
+      if (!isDirty() && !syncing) return;
+      if (!syncing) await runSync(); else await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+  function askVersion(def, gameName) {
+    return new Promise((resolve) => {
+      const dlg = $("ver-dialog");
+      $("ver-game").textContent = gameName;
+      $("ver-num").value = def;
+      $("ver-notes").value = "";
+      $("ver-ok").onclick = (ev) => {
+        ev.preventDefault();
+        const v = $("ver-num").value.trim();
+        if (!v) { $("ver-num").focus(); return; }
+        const n = $("ver-notes").value.trim();
+        dlg.close();
+        resolve({ version: v, notes: n });
+      };
+      $("ver-cancel").onclick = (ev) => { ev.preventDefault(); dlg.close(); resolve(null); };
+      dlg.oncancel = () => resolve(null);
+      dlg.showModal();
+      $("ver-num").select();
+    });
+  }
+  async function createVersion(gid) {
+    let g = findGame(gid);
+    if (!g) return;
+    const last = (g.versions || []).slice(-1)[0];
+    const r = await askVersion(nextVersion(last && last.version), g.name);
+    if (!r) return;
+    await flushSync();
+    g = findGame(gid);
+    if (!g) return;
+    const arr = versionsOf(g), prev = arr[arr.length - 1];
+    if (prev) prev.snap = snapOf(g); // bản trước được chụp lại nguyên trạng, bản mới tiếp tục từ thông tin hiện tại
+    arr.push({ id: "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 4), version: r.version, date: todayStr(), notes: r.notes });
+    state.versions[gid] = arr;
+    delete ui.viewVersion[gid];
+    save(); render();
+    toast('Đã tạo phiên bản ' + r.version + (prev ? ". Thông tin bản " + prev.version + " đã được lưu lại để xem sau." : "."));
+  }
+  function deleteVersion(gid, vid) {
+    const g = findGame(gid);
+    if (!g) return;
+    const before = versionsOf(g), v = before.find((x) => x.id === vid);
+    if (!v) return;
+    state.versions[gid] = before.filter((x) => x.id !== vid);
+    delete ui.viewVersion[gid];
+    save(); render();
+    toast("Đã xóa phiên bản " + v.version, () => { state.versions[gid] = before; save(); render(); });
+  }
 
   // ---------- Bộ lọc: nối sự kiện ----------
   let filterTimer = null;
@@ -1086,6 +1375,13 @@
       let inAdded = false; // việc thêm mới nằm trong state.added, việc gốc thì ghi đè bằng state.taskText
       Object.keys(state.added).forEach((gid) => state.added[gid].forEach((x) => { if (x.id === id) { x.text = text; inAdded = true; } }));
       if (!inAdded) state.taskText[id] = text;
+    } else if (kind === "ver") { // số phiên bản hoặc ghi chú bản vá
+      const gid = el.getAttribute("data-game"), g = findGame(gid);
+      const arr = g && versionsOf(g), v = arr && arr.find((x) => x.id === id);
+      if (!v || text === String(v[field] || "")) return;
+      if (field === "version" && !text) { el.textContent = v.version; toast("Số phiên bản không được để trống"); return; }
+      v[field] = text.slice(0, field === "notes" ? 5000 : 60); // khớp giới hạn trong quy tắc Firestore
+      state.versions[gid] = arr;
     } else if (kind === "cap") {
       const g = findGame(id), i = Number(field);
       if (!g || !g.images[i] || text === (g.images[i].caption || "")) return;
@@ -1096,7 +1392,7 @@
     save();
     rebuild();
     renderBoard(); // chỉ làm mới bảng đầu trang, không vẽ lại cả trang để khỏi cướp focus ô khác
-    $("dirty").hidden = false;
+    updateSaveStatus();
   }
   document.addEventListener("focusout", (e) => { if (e.target.matches && e.target.matches(EDITABLE)) commitEdit(e.target); });
   document.addEventListener("keydown", (e) => {
@@ -1119,7 +1415,7 @@
     if (!arr || !arr[i]) return;
     arr[i][el.getAttribute("data-k")] = el.value.trim();
     state.links[g.id] = arr;
-    save(); rebuild(); $("dirty").hidden = false;
+    save(); rebuild(); updateSaveStatus();
   });
 
   // Ảnh: đọc file, thu nhỏ còn tối đa 1280px, nén JPEG để nhẹ rồi giữ tạm cho tới khi Lưu lên web
@@ -1128,14 +1424,24 @@
       const url = URL.createObjectURL(file), img = new Image();
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const r = Math.min(1, 1280 / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = Math.max(1, Math.round(img.width * r));
-        c.height = Math.max(1, Math.round(img.height * r));
-        const ctx = c.getContext("2d");
-        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        resolve({ dataUrl: c.toDataURL("image/jpeg", 0.82), name: gid + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + ".jpg" });
+        // Thu nhỏ và nén dần cho tới khi đủ nhẹ (cơ sở dữ liệu giới hạn mỗi ảnh khoảng 500KB)
+        const LIMIT = 450000; // số ký tự của chuỗi ảnh
+        let max = 1280, q = 0.82, dataUrl = "";
+        for (let tries = 0; tries < 8; tries++) {
+          const r = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * r));
+          c.height = Math.max(1, Math.round(img.height * r));
+          const ctx = c.getContext("2d");
+          ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          dataUrl = c.toDataURL("image/jpeg", q);
+          if (dataUrl.length <= LIMIT) break;
+          q = Math.max(0.5, q - 0.1);
+          if (q <= 0.6) max = Math.round(max * 0.8);
+        }
+        if (dataUrl.length > LIMIT * 1.5) { reject(new Error("Ảnh quá lớn")); return; }
+        resolve({ dataUrl: dataUrl, name: gid + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) + ".jpg" });
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Không đọc được ảnh")); };
       img.src = url;
@@ -1152,11 +1458,12 @@
         if (!g) return;
         const arr = imagesOf(g);
         const old = index >= 0 ? arr[index] : null;
-        const item = { src: res.dataUrl, caption: old ? old.caption || "" : "", pending: res.name };
+        // iid gán ngay từ đầu để phiên bản có thể tham chiếu ảnh này
+        const item = { src: res.dataUrl, caption: old ? old.caption || "" : "", pending: res.name, iid: sanitizeId(res.name) };
         if (old) arr[index] = item; else arr.push(item);
         state.images[gid] = arr;
         save(); render();
-        toast(old ? "Đã thay ảnh. Bấm Lưu lên web để áp dụng." : "Đã thêm ảnh. Bấm Lưu lên web để áp dụng.");
+        toast(old ? "Đã thay ảnh." : "Đã thêm ảnh.");
       }).catch(() => toast("Không đọc được file ảnh này."));
     };
     inp.click();
@@ -1166,7 +1473,7 @@
   function moveGame(gid, key) {
     const from = sectionOf(gid), g = findGame(gid);
     if (!from || !g || from.key === key) return;
-    const prevMoved = state.moved[gid], prevProg = state.progress[gid], p = prog(g);
+    const p = prog(g);
     state.moved[gid] = key;
     if (key === "done") state.progress[gid] = 100;
     else if (key === "planned") state.progress[gid] = 0;
@@ -1175,8 +1482,8 @@
     save(); render();
     const to = DATA.sections.find((s) => s.key === key);
     toast('Đã chuyển "' + g.name + '" sang "' + (to ? to.title : key) + '"', () => {
-      if (prevMoved === undefined) delete state.moved[gid]; else state.moved[gid] = prevMoved;
-      if (prevProg === undefined) delete state.progress[gid]; else state.progress[gid] = prevProg;
+      state.moved[gid] = from.key; // đặt lại rõ ràng, vì bản gốc có thể đã đổi sau khi tự lưu
+      state.progress[gid] = p;
       save(); render();
     });
     requestAnimationFrame(() => { const c = $("g-" + gid); if (c) c.scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" }); });
@@ -1257,144 +1564,349 @@
       const before = imagesOf(g), arr = imagesOf(g); arr.splice(i, 1);
       state.images[gid] = arr; save(); render();
       toast("Đã xóa ảnh", () => { state.images[gid] = before; save(); render(); });
-    } else if (act === "add-game") addGame(el.getAttribute("data-sec"));
-    else if (act === "gh-save") saveToWeb();
+    } else if (act === "ver-new" && g) createVersion(gid);
+    else if (act === "ver-del" && g) deleteVersion(gid, el.getAttribute("data-id"));
+    else if (act === "add-game") addGame(el.getAttribute("data-sec"));
   });
 
-  // ---------- Lưu lên web (ghi vào GitHub, trang tự cập nhật sau ít phút) ----------
-  const GH_TOKEN_KEY = "game-progress-gh-token";
-  const getToken = () => { try { return localStorage.getItem(GH_TOKEN_KEY) || ""; } catch (e) { return ""; } };
-  const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
-  const fromB64 = (s) => decodeURIComponent(escape(atob(s.replace(/\n/g, ""))));
-  function askToken() {
-    return new Promise((resolve) => {
-      const dlg = $("gh-dialog"), inp = $("gh-token");
-      inp.value = "";
-      const finish = (v) => { dlg.close(); resolve(v); };
-      $("gh-ok").onclick = (ev) => {
-        ev.preventDefault();
-        const v = inp.value.trim();
-        if (!v) { inp.focus(); return; }
-        try { localStorage.setItem(GH_TOKEN_KEY, v); } catch (err) {}
-        finish(v);
-      };
-      $("gh-cancel").onclick = (ev) => { ev.preventDefault(); finish(""); };
-      dlg.oncancel = () => resolve("");
-      dlg.showModal();
-      inp.focus();
-    });
-  }
-  async function gh(cfg, token, path, opts) {
-    const o = opts || {};
-    const r = await fetch("https://api.github.com/repos/" + cfg.repo + path, {
-      method: o.method || "GET",
-      headers: Object.assign({ Authorization: "Bearer " + token, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, o.body ? { "Content-Type": "application/json" } : {}),
-      body: o.body
-    });
-    if (!r.ok) {
-      const err = new Error("GitHub " + r.status);
-      err.status = r.status;
-      try { err.detail = (await r.json()).message; } catch (x) {}
-      throw err;
-    }
-    return r.json();
-  }
-  let saving = false;
-  function setSaveBusy(b) {
-    const btn = $("save-web");
-    btn.disabled = b;
-    btn.textContent = b ? "Đang lưu…" : "Lưu lên web";
-  }
-  async function saveToWeb() {
-    const cfg = DATA.github;
-    if (!cfg || !cfg.repo) { toast("Chưa cấu hình mục github trong data.js."); return; }
-    if (saving) return;
-    if (!isDirty()) { toast("Chưa có thay đổi nào để lưu."); return; }
-    let token = getToken();
-    if (!token) { token = await askToken(); if (!token) return; }
-    saving = true; setSaveBusy(true);
-    try {
-      const out = buildExport();
-      const branch = cfg.branch || "main", path = cfg.path || "data.js";
-      // 1) tải ảnh mới lên thư mục images/
-      for (const sec of out.sections) for (const g of sec.games) for (const im of g.images || []) {
-        if (!im.pending) continue;
-        await gh(cfg, token, "/contents/images/" + encodeURIComponent(im.pending), {
-          method: "PUT",
-          body: JSON.stringify({ message: "Thêm ảnh " + im.pending, content: im.src.split(",")[1], branch: branch })
-        });
-        im.src = "images/" + im.pending;
-        delete im.pending;
-      }
-      // 2) ghi data.js, giữ nguyên phần chú thích ở đầu file
-      const cur = await gh(cfg, token, "/contents/" + path + "?ref=" + encodeURIComponent(branch));
-      const old = fromB64(cur.content), at = old.search(/^window\.PROGRESS\s*=/m); // đầu dòng, để không nhầm với chữ trong phần chú thích
-      const text = (at > 0 ? old.slice(0, at) : "") + "window.PROGRESS = " + JSON.stringify(out, null, 2) + ";\n";
-      await gh(cfg, token, "/contents/" + path, {
-        method: "PUT",
-        body: JSON.stringify({ message: "Cập nhật tiến độ từ trang web", content: b64(text), sha: cur.sha, branch: branch })
-      });
-      // 3) xong: dữ liệu vừa lưu trở thành dữ liệu gốc, xóa các chỉnh sửa tạm
-      BASE = { sections: JSON.parse(JSON.stringify(out.sections)) };
-      DATA.updated = out.updated;
-      state = EMPTY();
-      save(); render();
-      toast("Đã lưu lên web. Mọi người sẽ thấy sau khoảng 1 phút.");
-    } catch (e) {
-      if (e.status === 401) {
-        try { localStorage.removeItem(GH_TOKEN_KEY); } catch (x) {}
-        toast("Token không hợp lệ hoặc đã hết hạn. Bấm Lưu lên web để nhập token mới.");
-      } else if (e.status === 403 || e.status === 404) {
-        toast("Token chưa đủ quyền ghi vào repo. Cần quyền Contents: Read and write.");
-      } else if (e.status === 409 || e.status === 422) {
-        toast("Dữ liệu trên web vừa thay đổi. Tải lại trang rồi thử lại.");
-      } else {
-        toast("Không lưu được: " + (e.detail || e.message));
-      }
-    } finally {
-      saving = false; setSaveBusy(false);
-    }
-  }
-  $("save-web").addEventListener("click", saveToWeb);
-  $("gh-forget").addEventListener("click", () => {
-    try { localStorage.removeItem(GH_TOKEN_KEY); } catch (e) {}
-    toast("Đã xóa token khỏi trình duyệt này.");
-  });
 
-  // ---------- Kết nối chat ----------
+  // ---------- Cơ sở dữ liệu: kết nối, đồng bộ nội dung, chat ----------
+  // Nội dung nằm ở rooms/{mã-bí-mật}/ với 4 nhóm: content (thông tin chung), games, images, messages.
+  const sanitizeId = (s) => String(s || "").replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80);
+  const stable = (o) => JSON.stringify(o, (k, v) => (v && typeof v === "object" && !Array.isArray(v)
+    ? Object.keys(v).sort().reduce((r, key) => { r[key] = v[key]; return r; }, {}) : v));
+
+  let contentReady = !chatOn;  // đã tải xong nội dung từ cơ sở dữ liệu (hoặc không dùng cơ sở dữ liệu)
+  let dbError = "";            // lỗi kết nối hiển thị thay cho trang
+  let remoteSite = null, remoteGames = {}, remoteImages = {}, remoteVersions = {};
+  const got = { content: false, games: false, images: false, versions: false };
+
+  // <rtdb-adapter>
+  // Bộ kết nối Firebase Realtime Database. Dữ liệu nằm ở rooms/{mã}/{messages|content|games|images|versions}/{id}.
+  // Realtime Database bỏ mọi mảng rỗng, giá trị null và đối tượng rỗng, nên khi đọc phải bù lại cho giống hệt
+  // dạng dữ liệu trong trang. Nếu không, phép so sánh sẽ luôn thấy "khác" và trang ghi lại mãi.
+  function makeRtdbAdapter(rt, db, room) {
+    const R = (p) => rt.ref(db, "rooms/" + room + (p ? "/" + p : ""));
+    const arr = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.keys(v).sort((a, b) => a - b).map((k) => v[k]) : []);
+    const clean = (o) => JSON.parse(JSON.stringify(o)); // bỏ giá trị undefined (Realtime Database không nhận)
+    const fixSnap = (s) => (s ? Object.assign({}, s, { links: arr(s.links), tasks: arr(s.tasks), images: arr(s.images) }) : null);
+    const fix = (name, d) => {
+      if (!d || typeof d !== "object") return d;
+      if (name === "games") return Object.assign({}, d, { links: arr(d.links), tasks: arr(d.tasks) });
+      if (name === "versions") return Object.assign({}, d, { snap: fixSnap(d.snap) });
+      if (name === "content") return Object.assign({}, d, { sections: arr(d.sections) });
+      return d;
+    };
+    return {
+      subscribe: (onList, onErr) => rt.onValue(R("messages"), (snap) => {
+        const v = snap.val() || {};
+        onList(Object.keys(v).map((id) => Object.assign({ id: id }, v[id])).sort((a, b) => a.ts - b.ts));
+      }, onErr),
+      add: (m) => rt.set(rt.push(R("messages")), clean(m)),
+      remove: (id) => rt.remove(R("messages/" + id)),
+      restore: (m) => { const rest = Object.assign({}, m); delete rest.id; return rt.set(R("messages/" + m.id), clean(rest)); },
+      patch: (id, data) => rt.update(R("messages/" + id), data),
+      watch: (name, cb, onErr) => rt.onValue(R(name), (snap) => {
+        const v = snap.val() || {};
+        cb(Object.keys(v).map((id) => ({ id: id, data: fix(name, v[id]) })));
+      }, onErr),
+      // Gộp nhiều thay đổi vào từng lượt ghi một lần (tối đa khoảng 3MB mỗi lượt)
+      commit: async (ops) => {
+        let upd = {}, size = 0;
+        const flush = async () => { if (size) { await rt.update(R(""), upd); upd = {}; size = 0; } };
+        for (const op of ops) {
+          const p = op.col + "/" + op.id;
+          let add = {};
+          if (op.t === "del") add[p] = null;
+          else if (op.merge) Object.keys(op.data).forEach((k) => { add[p + "/" + k] = op.data[k]; });
+          else add[p] = clean(op.data);
+          const s = JSON.stringify(add).length;
+          if (size && size + s > 3000000) await flush();
+          Object.assign(upd, add);
+          size += s;
+        }
+        await flush();
+      }
+    };
+  }
+  // </rtdb-adapter>
+
   async function createChatApi() {
+    if (CHAT.provider === "rtdb") {
+      const base = "https://www.gstatic.com/firebasejs/10.14.1/";
+      const [appMod, rt] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-database.js")]);
+      const app = appMod.initializeApp(CHAT.firebase);
+      return makeRtdbAdapter(rt, rt.getDatabase(app, CHAT.firebase.databaseURL), room);
+    }
     if (CHAT.provider === "firebase") {
       const base = "https://www.gstatic.com/firebasejs/10.14.1/";
       const [appMod, fs] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-firestore.js")]);
       const db = fs.getFirestore(appMod.initializeApp(CHAT.firebase));
-      const col = fs.collection(db, "rooms", room, "messages");
+      const col = (name) => fs.collection(db, "rooms", room, name);
+      const ref = (name, id) => fs.doc(db, "rooms", room, name, id);
       return {
-        subscribe: (onList, onErr) => fs.onSnapshot(fs.query(col, fs.orderBy("ts")),
+        subscribe: (onList, onErr) => fs.onSnapshot(fs.query(col("messages"), fs.orderBy("ts")),
           (snap) => onList(snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))), onErr),
-        add: (m) => fs.addDoc(col, m),
-        remove: (id) => fs.deleteDoc(fs.doc(col, id)),
-        restore: (m) => { const rest = Object.assign({}, m); delete rest.id; return fs.setDoc(fs.doc(col, m.id), rest); }
+        add: (m) => fs.addDoc(col("messages"), m),
+        remove: (id) => fs.deleteDoc(ref("messages", id)),
+        restore: (m) => { const rest = Object.assign({}, m); delete rest.id; return fs.setDoc(ref("messages", m.id), rest); },
+        patch: (id, data) => fs.setDoc(ref("messages", id), data, { merge: true }),
+        watch: (name, cb, onErr) => fs.onSnapshot(col(name),
+          (snap) => cb(snap.docs.map((d) => ({ id: d.id, data: d.data() }))), onErr),
+        commit: async (ops) => {
+          for (let i = 0; i < ops.length; i += 100) {
+            const b = fs.writeBatch(db);
+            ops.slice(i, i + 100).forEach((op) => {
+              const r = ref(op.col, op.id);
+              if (op.t === "del") b.delete(r); else if (op.merge) b.set(r, op.data, { merge: true }); else b.set(r, op.data);
+            });
+            await b.commit();
+          }
+        }
       };
     }
-    // "local": chat thử giữa các tab cùng trình duyệt (không cần máy chủ)
-    const LSK = "gp-chat-local-" + room;
+    // "local": cơ sở dữ liệu thử giữa các tab cùng trình duyệt (không cần máy chủ)
+    const LSK = "gp-db-local-" + room;
     const bc = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(LSK) : null;
-    const read = () => { try { return JSON.parse(localStorage.getItem(LSK)) || []; } catch (e) { return []; } };
-    const write = (l) => localStorage.setItem(LSK, JSON.stringify(l));
-    let cb = null;
-    const push = () => { if (cb) cb(read().sort((a, b) => a.ts - b.ts)); };
-    const changed = () => { if (bc) bc.postMessage(1); push(); };
-    if (bc) bc.onmessage = push;
-    window.addEventListener("storage", (e) => { if (e.key === LSK) push(); });
+    const blank = () => ({ messages: [], content: {}, games: {}, images: {}, versions: {} });
+    const read = () => { try { const o = JSON.parse(localStorage.getItem(LSK)); if (o) return Object.assign(blank(), o); } catch (e) {} return blank(); };
+    const write = (o) => localStorage.setItem(LSK, JSON.stringify(o));
+    const subs = [];
+    const list = (o, name) => (name === "messages" ? o.messages.slice().sort((a, b) => a.ts - b.ts) : Object.keys(o[name]).map((id) => ({ id: id, data: o[name][id] })));
+    const emit = () => { const o = read(); subs.forEach((s) => s.cb(list(o, s.name))); };
+    const changed = () => { if (bc) bc.postMessage(1); emit(); };
+    if (bc) bc.onmessage = emit;
+    window.addEventListener("storage", (e) => { if (e.key === LSK) emit(); });
     return {
-      subscribe: (onList) => { cb = onList; push(); return () => { cb = null; }; },
-      add: async (m) => { const l = read(); l.push(Object.assign({ id: uid("m-") }, m)); write(l); changed(); },
-      remove: async (id) => { write(read().filter((x) => x.id !== id)); changed(); },
-      restore: async (m) => { const l = read(); l.push(m); write(l); changed(); }
+      subscribe: (onList) => { subs.push({ name: "messages", cb: onList }); onList(list(read(), "messages")); },
+      add: async (m) => { const o = read(); o.messages.push(Object.assign({ id: uid("m-") }, m)); write(o); changed(); },
+      remove: async (id) => { const o = read(); o.messages = o.messages.filter((x) => x.id !== id); write(o); changed(); },
+      restore: async (m) => { const o = read(); o.messages.push(m); write(o); changed(); },
+      patch: async (id, data) => { const o = read(); const m = o.messages.find((x) => x.id === id); if (m) Object.assign(m, data); write(o); changed(); },
+      watch: (name, cb) => { subs.push({ name: name, cb: cb }); cb(list(read(), name)); },
+      commit: async (ops) => {
+        const o = read();
+        ops.forEach((op) => {
+          if (op.t === "del") delete o[op.col][op.id];
+          else o[op.col][op.id] = op.merge ? Object.assign({}, o[op.col][op.id], op.data) : op.data;
+        });
+        write(o); changed();
+      }
     };
   }
 
-  // Cập nhật khi có tin mới. Đang gõ chữ thì chỉ làm mới danh sách tin, không vẽ lại ô gõ
+  // ----- Chuyển qua lại giữa mô hình trong trang và tài liệu trong cơ sở dữ liệu -----
+  // model = { title, updated, sections: [{ key, title, note, games: [{ id, name, ..., images: [{src, caption}] }] }] }
+  function toDocs(model) {
+    const site = { title: model.title || "", updated: model.updated || "",
+      sections: model.sections.map((s) => ({ key: s.key, title: s.title || "", note: s.note || "" })) };
+    const games = {}, images = {}, versions = {};
+    model.sections.forEach((s) => s.games.forEach((g, order) => {
+      games[g.id] = {
+        sec: s.key, order: order, name: g.name || "", genre: g.genre || "", platform: g.platform || "", meta: g.meta || "",
+        description: g.description || "", progress: Number(g.progress) || 0,
+        links: (g.links || []).map((l) => ({ title: l.title || "", url: l.url || "" })),
+        tasks: (g.tasks || []).map((t) => ({ id: String(t.id), text: t.text || "", done: !!t.done }))
+      };
+      (g.images || []).forEach((im, i) => {
+        if (!im.iid) im.iid = sanitizeId(im.pending || g.id + "-" + uid("i"));
+        delete im.pending;
+        images[im.iid] = { gid: g.id, order: i, caption: im.caption || "", src: im.src };
+      });
+      // ảnh đã bỏ khỏi game nhưng còn thuộc một phiên bản cũ (khi nhập bản sao lưu)
+      (g.archive || []).forEach((a) => {
+        if (a.iid && a.src && !images[a.iid]) images[a.iid] = { gid: g.id, order: -1, caption: a.caption || "", src: a.src, retired: true };
+      });
+      (g.versions || []).forEach((v, i) => {
+        versions[v.id] = { gid: g.id, order: i, version: v.version || "", date: v.date || "", notes: v.notes || "", snap: v.snap ? cleanSnap(v.snap) : null };
+      });
+    }));
+    return { site: site, games: games, images: images, versions: versions };
+  }
+  function cleanSnap(s) { // bản chụp thông tin game: chỉ giữ các trường hợp lệ, không có giá trị undefined
+    return {
+      sec: s.sec || "", name: s.name || "", genre: s.genre || "", platform: s.platform || "", meta: s.meta || "",
+      description: s.description || "", progress: Number(s.progress) || 0,
+      links: (s.links || []).map((l) => ({ title: l.title || "", url: l.url || "" })),
+      tasks: (s.tasks || []).map((t) => ({ id: String(t.id), text: t.text || "", done: !!t.done })),
+      images: (s.images || []).map((im) => { const o = { caption: im.caption || "" }; if (im.iid) o.iid = im.iid; if (im.src) o.src = im.src; return o; })
+    };
+  }
+  // So sánh với dữ liệu đang có trên máy chủ, chỉ ghi phần khác (ảnh không đổi thì không gửi lại nội dung ảnh)
+  function diffOps(docs) {
+    const ops = [];
+    if (!remoteSite || stable(remoteSite) !== stable(docs.site)) ops.push({ t: "set", col: "content", id: "site", data: docs.site });
+    Object.keys(docs.games).forEach((id) => {
+      if (!remoteGames[id] || stable(remoteGames[id]) !== stable(docs.games[id])) ops.push({ t: "set", col: "games", id: id, data: docs.games[id] });
+    });
+    Object.keys(remoteGames).forEach((id) => { if (!docs.games[id]) ops.push({ t: "del", col: "games", id: id }); });
+    // ảnh còn được phiên bản cũ tham chiếu thì không được xóa hẳn, chỉ "cất đi" (retired)
+    const refs = new Set();
+    Object.keys(docs.versions).forEach((vid) => {
+      const sn = docs.versions[vid].snap;
+      if (sn) (sn.images || []).forEach((im) => { if (im.iid) refs.add(im.iid); });
+    });
+    Object.keys(docs.images).forEach((iid) => {
+      const d = docs.images[iid], r = remoteImages[iid];
+      if (!r) ops.push({ t: "set", col: "images", id: iid, data: d });
+      else if (r.gid !== d.gid || r.order !== d.order || (r.caption || "") !== d.caption || !!r.retired !== !!d.retired) {
+        ops.push({ t: "set", col: "images", id: iid, data: { gid: d.gid, order: d.order, caption: d.caption, retired: !!d.retired }, merge: true });
+      }
+    });
+    Object.keys(remoteImages).forEach((iid) => {
+      if (docs.images[iid]) return;
+      const r = remoteImages[iid];
+      if (refs.has(iid)) { if (!r.retired) ops.push({ t: "set", col: "images", id: iid, data: { retired: true }, merge: true }); }
+      else if (!r.retired) ops.push({ t: "del", col: "images", id: iid });
+      // ảnh đã cất mà không còn phiên bản nào dùng: giữ nguyên để hoàn tác việc xóa phiên bản vẫn còn ảnh
+    });
+    Object.keys(docs.versions).forEach((vid) => {
+      if (!remoteVersions[vid] || stable(remoteVersions[vid]) !== stable(docs.versions[vid])) ops.push({ t: "set", col: "versions", id: vid, data: docs.versions[vid] });
+    });
+    Object.keys(remoteVersions).forEach((vid) => { if (!docs.versions[vid]) ops.push({ t: "del", col: "versions", id: vid }); });
+    return ops;
+  }
+
+  // ----- Tự động lưu: mỗi chỉnh sửa được gom lại rồi ghi lên cơ sở dữ liệu -----
+  let syncT = null, syncing = false, syncAgain = false, syncError = false, lastSaved = 0;
+  function updateSaveStatus() {
+    const el = $("dirty");
+    if (!el) return;
+    if (!ui.editing) { el.hidden = true; return; }
+    let t;
+    if (!chatOn) t = "Chưa kết nối cơ sở dữ liệu: thay đổi chỉ nằm trên trình duyệt này.";
+    else if (syncError) t = "Chưa lưu được, đang thử lại…";
+    else if (syncing || isDirty()) t = "Đang lưu…";
+    else if (lastSaved) { const d = new Date(lastSaved); t = "Đã lưu lúc " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + "."; }
+    else t = "Đã lưu.";
+    el.textContent = t;
+    el.classList.toggle("err", syncError);
+    el.hidden = false;
+  }
+  function scheduleSync(delay) {
+    clearTimeout(syncT);
+    syncT = setTimeout(runSync, delay == null ? 700 : delay);
+    updateSaveStatus();
+  }
+  async function runSync() {
+    if (!chatApi || !contentReady) { syncT = setTimeout(runSync, 1000); return; } // chờ kết nối xong
+    if (syncing) { syncAgain = true; return; }
+    if (!isDirty()) { updateSaveStatus(); return; }
+    syncing = true; syncError = false; updateSaveStatus();
+    const snap = JSON.stringify(state);
+    try {
+      const out = buildExport();
+      const ops = diffOps(toDocs(out));
+      if (ops.length) await chatApi.commit(ops);
+      lastSaved = Date.now();
+      if (JSON.stringify(state) === snap) { // không có chỉnh sửa mới trong lúc lưu: bản vừa lưu thành dữ liệu gốc
+        BASE = { sections: JSON.parse(JSON.stringify(out.sections)) };
+        DATA.updated = out.updated;
+        state = EMPTY();
+        persist();
+        softRender();
+      } else {
+        syncAgain = true; // có chỉnh sửa mới: lưu thêm một lượt nữa
+      }
+    } catch (e) {
+      syncError = true;
+      setTimeout(() => scheduleSync(0), 5000);
+    } finally {
+      syncing = false;
+      updateSaveStatus();
+      if (syncAgain) { syncAgain = false; scheduleSync(300); }
+    }
+  }
+
+  // ----- Nhận dữ liệu từ máy chủ -----
+  let rebuildT = null, seeding = false;
+  const scheduleRebuild = () => { clearTimeout(rebuildT); rebuildT = setTimeout(applyRemote, 40); };
+  function applyRemote() {
+    if (!got.content || !got.games || !got.images || !got.versions) return;
+    if (!remoteSite) { seedFromStatic(); return; }
+    imgIndex = {};
+    const secs = (remoteSite.sections || []).map((s) => ({ key: s.key, title: s.title, note: s.note || "", games: [] }));
+    const byId = {};
+    Object.keys(remoteGames).map((id) => Object.assign({ id: id }, remoteGames[id]))
+      .sort((a, b) => (a.order || 0) - (b.order || 0)).forEach((g) => {
+        const s = secs.find((x) => x.key === g.sec) || secs[0];
+        if (!s) return;
+        const game = { id: g.id, name: g.name, genre: g.genre, platform: g.platform, meta: g.meta || "", description: g.description,
+          progress: g.progress || 0, links: g.links || [], tasks: g.tasks || [], images: [], versions: [], comments: [] };
+        s.games.push(game);
+        byId[g.id] = game;
+      });
+    Object.keys(remoteImages).map((iid) => Object.assign({ iid: iid }, remoteImages[iid]))
+      .sort((a, b) => (a.order || 0) - (b.order || 0)).forEach((im) => {
+        imgIndex[im.iid] = im.src; // gồm cả ảnh đã cất, để phiên bản cũ vẫn hiện đủ ảnh
+        if (!im.retired && byId[im.gid]) byId[im.gid].images.push({ src: im.src, caption: im.caption || "", iid: im.iid });
+      });
+    Object.keys(remoteVersions).map((vid) => Object.assign({ id: vid }, remoteVersions[vid]))
+      .sort((a, b) => (a.order || 0) - (b.order || 0)).forEach((v) => {
+        if (byId[v.gid]) byId[v.gid].versions.push({ id: v.id, version: v.version || "", date: v.date || "", notes: v.notes || "", snap: v.snap || null });
+      });
+    BASE = { sections: secs };
+    if (remoteSite.title) DATA.title = remoteSite.title;
+    DATA.updated = remoteSite.updated || DATA.updated;
+    const first = !contentReady;
+    contentReady = true;
+    dbError = "";
+    softRender();
+    if (first) afterFirstContent();
+  }
+  // Lần đầu cơ sở dữ liệu còn trống: nạp dữ liệu mẫu trong data.js làm điểm bắt đầu
+  async function seedFromStatic() {
+    if (seeding || !chatApi) return;
+    seeding = true;
+    try {
+      const model = { title: DATA.title, updated: DATA.updated, sections: SEED.map((s) => ({
+        key: s.key, title: s.title, note: s.note || "",
+        games: s.games.map((g) => Object.assign({}, g, { images: (g.images || []).map((im, i) => ({ src: im.src, caption: im.caption || "", iid: sanitizeId(g.id + "-" + (i + 1)) })) }))
+      })) };
+      await chatApi.commit(diffOps(toDocs(model))); // dữ liệu mẫu gồm cả phiên bản mẫu (g.versions)
+      toast("Đã nạp dữ liệu mẫu vào cơ sở dữ liệu. Bạn có thể sửa ngay.");
+    } catch (e) {
+      dbError = "Không nạp được dữ liệu. Kiểm tra quy tắc bảo mật Firestore và kết nối mạng.";
+      softRender();
+    } finally {
+      seeding = false;
+    }
+  }
+  // Nhập bản sao lưu: ghi đè toàn bộ nội dung trên máy chủ bằng nội dung trong file
+  async function importModel(m) {
+    try {
+      // Mã (id) lấy từ file nên làm sạch: Realtime Database cấm . $ # [ ] / trong khóa
+      m.sections.forEach((s) => s.games.forEach((g) => {
+        g.id = sanitizeId(g.id);
+        (g.images || []).forEach((im) => { if (im.iid) im.iid = sanitizeId(im.iid); });
+        (g.archive || []).forEach((a) => { if (a.iid) a.iid = sanitizeId(a.iid); });
+        (g.versions || []).forEach((v) => {
+          v.id = sanitizeId(v.id);
+          if (v.snap) (v.snap.images || []).forEach((im) => { if (im.iid) im.iid = sanitizeId(im.iid); });
+        });
+      }));
+      const model = { title: m.title || DATA.title, updated: m.updated || DATA.updated, sections: m.sections.map((s) => ({
+        key: String(s.key), title: s.title || "", note: s.note || "",
+        games: s.games.map((g) => Object.assign({}, g, { images: (g.images || []).map((im) => ({ src: im.src, caption: im.caption || "", iid: im.iid })) }))
+      })) };
+      const ops = diffOps(toDocs(model));
+      await chatApi.commit(ops);
+      state = EMPTY();
+      persist();
+      toast("Đã nhập bản sao lưu.");
+    } catch (e) {
+      toast("Không nhập được bản sao lưu (file quá lớn hoặc mất kết nối).");
+    }
+  }
+  // Mở đúng chỗ theo link (#g-, #c-, #t-) sau khi nội dung tải xong
+  function afterFirstContent() {
+    const h = decodeURIComponent(location.hash.slice(1));
+    if (/^t-/.test(h)) handleHash(false);
+    else if (/^[gc]-/.test(h)) { const c = $(h); if (c) c.scrollIntoView({ block: "start" }); }
+  }
+
+  // ----- Cập nhật khi có tin mới / dữ liệu mới -----
+  // Đang gõ chữ thì chỉ làm mới danh sách tin, không vẽ lại ô gõ
   // (vẽ lại sẽ làm mất chữ đang gõ dở, nhất là gõ tiếng Việt kiểu Telex).
   let knownIds = null, pendingRender = false;
   const isTyping = () => {
@@ -1431,16 +1943,24 @@
     softRender();
     if (!chatReady) {
       chatReady = true;
-      if (/^#t-/.test(location.hash)) handleHash(false); // mở đúng phần từ link email khi tin đã tải xong
+      if (contentReady && /^#t-/.test(location.hash)) handleHash(false); // mở đúng phần từ link khi tin đã tải xong
     }
   }
   async function initChat() {
     if (!chatOn || !room) return;
+    const fail = () => {
+      dbError = "Không kết nối được cơ sở dữ liệu. Kiểm tra mạng và quy tắc bảo mật Firestore.";
+      softRender();
+    };
     try {
       chatApi = await createChatApi();
       chatApi.subscribe(onRemote, () => toast("Mất kết nối chat, hãy tải lại trang."));
+      chatApi.watch("content", (docs) => { const s = docs.find((d) => d.id === "site"); remoteSite = s ? s.data : null; got.content = true; scheduleRebuild(); }, fail);
+      chatApi.watch("games", (docs) => { remoteGames = {}; docs.forEach((d) => { remoteGames[d.id] = d.data; }); got.games = true; scheduleRebuild(); }, fail);
+      chatApi.watch("images", (docs) => { remoteImages = {}; docs.forEach((d) => { remoteImages[d.id] = d.data; }); got.images = true; scheduleRebuild(); }, fail);
+      chatApi.watch("versions", (docs) => { remoteVersions = {}; docs.forEach((d) => { remoteVersions[d.id] = d.data; }); got.versions = true; scheduleRebuild(); }, fail);
     } catch (e) {
-      toast("Không kết nối được chat.");
+      fail();
     }
   }
 

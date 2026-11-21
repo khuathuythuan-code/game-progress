@@ -1,39 +1,34 @@
 /*
-  ====== DỮ LIỆU TRANG — CHỈ CẦN SỬA FILE NÀY KHI CẬP NHẬT ======
-  CÁCH DỄ NHẤT: sửa ngay trên trang (nút "Chỉnh sửa" ở thanh trên cùng) rồi bấm "Lưu lên web".
-  Trang sẽ tự ghi lại file này. Khi đó chỉ phần từ dòng "window.PROGRESS" trở xuống bị ghi đè,
-  phần chú thích này được giữ nguyên. Vì vậy ĐỪNG viết chú thích bên trong dữ liệu bên dưới.
+  ====== CẤU HÌNH + DỮ LIỆU MẪU ======
+  Nội dung thật (chữ, ảnh, tiến độ, tin nhắn) nằm trong CƠ SỞ DỮ LIỆU (Firebase), không nằm ở đây.
+  Sửa ngay trên trang bằng nút "Chỉnh sửa": thay đổi tự lưu và mọi người thấy ngay, không cần commit.
 
-  Sửa tay (nếu muốn):
-  - Thêm game: copy 1 khối { ... } trong "games" của mục tương ứng rồi sửa.
-  - Chuyển game sang mục khác: cắt khối game dán sang mục khác.
-  - Ảnh: bỏ file vào thư mục images/ rồi ghi đường dẫn vào "images".
-  - "id" của game/việc/nhận xét phải KHÔNG trùng nhau (dùng để nhớ trạng thái xóa/tích).
-  - Nhận xét: thêm vào mảng "comments" của game, dạng
-      { id: "cm-5", author: "Sếp", text: "Nội dung", time: "2026-11-20T09:30:00" }
-    Nhận xét về một phần cụ thể thì thêm target, ví dụ:
-      target: { id: "t-dragon-idle-progress", label: "Tiến độ" }
-    (id phần giao diện: t-<id game>-title | progress | desc | img-<số> | link-<số> | task-<id việc>)
-    Thường bạn không cần gõ tay: sếp nhận xét trên trang rồi bạn bấm "Sao chép dữ liệu" ở chế độ sửa.
-  - Email thông báo khi có nhận xét mới (xem README, mục "Nhận thông báo email"):
-      notify.url       : địa chỉ nhận form của FormSubmit, Formspree hoặc Web3Forms
-      notify.accessKey : chỉ Web3Forms cần (các dịch vụ khác để trống)
-    Để trống notify.url thì trang không tự gửi; người xem bấm "Gửi nhận xét"
-    để sao chép nội dung (hoặc mở email nếu bạn điền feedbackEmail).
-  - notify (Web3Forms): accessKey chỉ cho phép gửi thư về hộp thư đã đăng ký với Web3Forms,
-    không để lộ địa chỉ email, nên để công khai trong mã trang là bình thường.
-  - chat (xem README, mục "Chat hai chiều"): điền cấu hình Firebase rồi đổi provider thành "firebase".
-    Các giá trị Firebase là thông tin công khai, không phải mật khẩu.
-  - github: nơi nút "Lưu lên web" ghi dữ liệu (repo, nhánh, đường dẫn file). Token KHÔNG nằm ở đây:
-    mỗi lần dùng lần đầu, trang hỏi token và chỉ nhớ trong trình duyệt của bạn.
+  File này chỉ dùng cho:
+  1) Cấu hình kết nối (phần db, notify bên dưới).
+  2) Dữ liệu MẪU: lần đầu mở trang với link riêng, nếu cơ sở dữ liệu còn trống thì dữ liệu mẫu
+     bên dưới được nạp vào làm điểm bắt đầu. Sau đó sửa dữ liệu mẫu ở đây không còn tác dụng.
+
+  - db: cấu hình kết nối Firebase (xem README, mục "Cài đặt cơ sở dữ liệu").
+    provider "rtdb"     = Firebase Realtime Database (cần databaseURL). Quy tắc: database.rules.json.
+    provider "firebase" = Firebase Firestore (cần projectId). Quy tắc: firestore.rules.
+    provider ""         = chưa kết nối (trang hiện dữ liệu mẫu, sửa chỉ nằm trên trình duyệt này).
+    provider "local"    = thử giữa các tab cùng một trình duyệt (chỉ để thử, đừng dùng thật).
+    Các giá trị Firebase là thông tin công khai, không phải mật khẩu. Quyền truy cập nằm ở link riêng
+    (đuôi ?k=mã-bí-mật) và ở quy tắc bảo mật phía Firebase.
+  - notify (Web3Forms): thông báo email cho bạn khi người khác nhắn. accessKey chỉ cho phép gửi thư về
+    hộp thư đã đăng ký với Web3Forms, không để lộ địa chỉ email, nên để công khai là bình thường.
 */
 window.PROGRESS = {
   title: "Tiến độ phát triển game",
   subtitle: "Báo cáo tiến độ các dự án game của team",
   updated: "20/11/2026",
   notify: { url: "https://api.web3forms.com/submit", accessKey: "1be8f425-c4fd-433d-b4e3-1bb481bd5bb0" },
-  chat: { provider: "", firebase: { apiKey: "", authDomain: "", projectId: "", appId: "" } },
-  github: { repo: "khuathuythuan-code/game-progress", branch: "main", path: "data.js" },
+  db: { provider: "rtdb", firebase: {
+    apiKey: "", appId: "",
+    authDomain: "gameprogress-2a12c.firebaseapp.com",
+    projectId: "gameprogress-2a12c",
+    databaseURL: "https://gameprogress-2a12c-default-rtdb.asia-southeast1.firebasedatabase.app"
+  } },
   feedbackEmail: "",
   sections: [
     {
@@ -70,6 +65,24 @@ window.PROGRESS = {
         },
         {
           id: "neon-racer",
+          versions: [
+            { id: "nr-v10", version: "v1.0", date: "15/03/2026",
+              notes: "- Phát hành bản đầu tiên\n- 9 đường đua, 6 mẫu xe",
+              snap: { sec: "done", name: "Neon Racer", genre: "Racing", platform: "Android", meta: "Phát hành 03/2026", progress: 100,
+                description: "Bản phát hành đầu: 9 đường đua, 6 mẫu xe, chưa có bảng xếp hạng tuần.",
+                links: [{ title: "Trang store", url: "https://example.com/neon-racer-store" }],
+                tasks: [{ id: "nr-1", text: "Phát hành bản 1.0", done: true }],
+                images: [{ src: "images/neon-racer-1.svg", caption: "Đường đua Neon City" }] } },
+            { id: "nr-v11", version: "v1.1", date: "20/06/2026",
+              notes: "- Thêm 3 đường đua mới (tổng 12)\n- Thêm garage nâng cấp xe\n- Sửa lỗi xe bị kẹt ở vạch xuất phát",
+              snap: { sec: "done", name: "Neon Racer", genre: "Racing", platform: "Android", meta: "Phát hành 03/2026", progress: 100,
+                description: "12 đường đua và garage nâng cấp xe. Bảng xếp hạng tuần đang được thử nghiệm.",
+                links: [{ title: "Trang store", url: "https://example.com/neon-racer-store" }],
+                tasks: [{ id: "nr-1", text: "Phát hành bản 1.0", done: true }, { id: "nr-2", text: "Thêm 3 đường đua mới", done: true }],
+                images: [{ src: "images/neon-racer-1.svg", caption: "Đường đua Neon City" }, { src: "images/neon-racer-2.svg", caption: "Garage nâng cấp xe" }] } },
+            { id: "nr-v12", version: "v1.2", date: "28/09/2026",
+              notes: "- Thêm bảng xếp hạng theo tuần\n- Tối ưu hiệu năng máy cấu hình thấp\n- Sửa lỗi mất tiến trình khi mất mạng" }
+          ],
           name: "Neon Racer",
           genre: "Racing",
           platform: "Android",
@@ -100,6 +113,24 @@ window.PROGRESS = {
       games: [
         {
           id: "dragon-idle",
+          versions: [
+            { id: "dq-v04", version: "v0.4", date: "20/09/2026",
+              notes: "- Hoàn thiện combat tự động\n- Thêm 30 loại rồng đầu tiên\n- Sửa lỗi treo khi vào tầng boss 10",
+              snap: { sec: "dev", name: "Dragon Quest Idle", genre: "Idle RPG", platform: "Android · iOS", meta: "Dự kiến ra mắt 03/2027", progress: 35,
+                description: "Bản đầu: đã có vòng lặp chiến đấu tự động và 30 loại rồng. Chưa có PvP, kinh tế game đang để tạm.",
+                links: [{ title: "Game Design Document", url: "https://example.com/dragon-idle-gdd" }],
+                tasks: [{ id: "dq-1", text: "Hoàn thiện core loop & combat tự động", done: true }, { id: "dq-2", text: "Làm xong UI màn hình chính", done: false }, { id: "dq-3", text: "Hệ thống PvP đấu trường", done: false }],
+                images: [{ src: "images/dragon-idle-1.svg", caption: "Màn hình chiến đấu tự động" }] } },
+            { id: "dq-v05", version: "v0.5", date: "18/10/2026",
+              notes: "- Thêm bộ sưu tập rồng (60 loại)\n- Làm lại giao diện màn hình chính\n- Sửa lỗi mất vàng khi thoát giữa trận",
+              snap: { sec: "dev", name: "Dragon Quest Idle", genre: "Idle RPG", platform: "Android · iOS", meta: "Dự kiến ra mắt 02/2027", progress: 50,
+                description: "Đã có bộ sưu tập 60 loại rồng và giao diện chính mới. Đang bắt đầu làm bản đồ tầng boss, PvP mới ở giai đoạn thiết kế.",
+                links: [{ title: "Game Design Document", url: "https://example.com/dragon-idle-gdd" }, { title: "Bảng cân bằng số liệu (Sheet)", url: "https://example.com/dragon-idle-balance" }],
+                tasks: [{ id: "dq-1", text: "Hoàn thiện core loop & combat tự động", done: true }, { id: "dq-2", text: "Làm xong UI màn hình chính", done: true }, { id: "dq-3", text: "Hệ thống PvP đấu trường", done: false }, { id: "dq-4", text: "Cân bằng kinh tế game (gold / gem)", done: false }],
+                images: [{ src: "images/dragon-idle-1.svg", caption: "Màn hình chiến đấu tự động" }, { src: "images/dragon-idle-2.svg", caption: "Bộ sưu tập rồng" }] } },
+            { id: "dq-v06", version: "v0.6", date: "20/11/2026",
+              notes: "- Thêm bản đồ tầng boss\n- Cân bằng lại vàng và gem lần đầu\n- Sửa lỗi crash khi mở bộ sưu tập" }
+          ],
           comments: [
             { id: "cm-1", author: "Sếp", text: "Phần PvP nên có bản demo sớm để mình xem thử trước khi mở closed beta.", time: "2026-11-18T09:30:00", target: { id: "t-dragon-idle-img-4", label: "Ảnh 4: Concept hệ thống PvP" } },
             { id: "cm-2", author: "Team", text: "Dạ, bản demo PvP sẽ có trong build tuần sau ạ.", time: "2026-11-18T14:05:00" }
