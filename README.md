@@ -68,6 +68,7 @@ trình duyệt này.
   - **Chữ**: bấm vào tên game, thể loại, nền tảng, ghi chú, mô tả, từng việc, chú thích ảnh (ô viền nét đứt)
     và gõ. Rời ô là tự lưu. Enter để xong (riêng mô tả, Enter xuống dòng).
   - **Ảnh**: **Thay ảnh** / **Xóa** trên mỗi ảnh, **+ Thêm ảnh** ở cuối dải ảnh. Ảnh tự thu nhỏ (tối đa 1280px)
+  - **Video YouTube**: nút **+ Thêm video YouTube** cạnh **+ Thêm ảnh**, dán link (watch, youtu.be, shorts đều được). Video hiện cùng dải ảnh với ảnh bìa và nút phát, bấm là phát ngay trong trang. Nên để video ở chế độ **Không công khai** trên YouTube. Trang chỉ lưu mã video (không lưu file), nên không tốn dung lượng. Mục video có nút **Đổi link** và **Xóa**, và nhận xét được như ảnh.
     và nén cho tới khi đủ nhẹ.
   - **Tài liệu tham khảo**: sửa tên và địa chỉ, **+ Thêm tài liệu**, ✕ để xóa.
   - **Việc cần làm**: tích xong, thêm, xóa, sửa chữ. **Tiến độ**: thanh kéo %.
@@ -119,6 +120,8 @@ trình duyệt này.
   tải bản sao lưu định kỳ.
 
 ## Chủ trang đăng nhập Google: không gửi email cho chính mình
+> **Hiện đang TẮT.** Đăng nhập Google đang được ẩn hoàn toàn (nút, hộp thoại, hộp gợi ý, thông báo) bằng công tắc `googleLogin: false` trong `data.js`. Khi tắt, chủ trang là trình duyệt đã bấm **Chỉnh sửa** như trước. Muốn dùng lại, đổi thành `true` rồi làm các bước dưới.
+
 Trang nhận ra chủ trang bằng tài khoản Google (Gmail) đang đăng nhập, không phải bằng mật khẩu riêng.
 - **Chủ trang** (đăng nhập đúng Gmail đã khai báo): nhắn, chỉnh sửa, xóa nhận xét đều **không** gửi email.
 - **Mọi người khác** (không đăng nhập, hoặc đăng nhập tài khoản Google khác): nhắn nhận xét gửi email ngay; chỉnh
@@ -134,6 +137,7 @@ Làm một lần:
    thanh bên trái và chọn Gmail chủ trang. **Chỉ cần làm một lần cho mỗi trình duyệt**: Firebase nhớ phiên, các lần
    sau trang tự nhận bạn là chủ trang. (Trang web không được phép tự đọc Gmail đang dùng trong trình duyệt nếu bạn
    chưa đồng ý một lần, đây là quy định của Google.) Nếu trình duyệt chặn cửa sổ đăng nhập, hãy cho phép pop-up.
+   Nếu hộp đăng nhập không tự mở trên một trình duyệt, thêm `&login=1` vào cuối link bí mật (ví dụ `...?k=MA-BI-MAT&login=1`) để luôn mở hộp. Hộp tự mở cho trình duyệt đã từng dùng chế độ Chỉnh sửa, người xem thông thường không thấy.
 4. Chủ trang được khai báo bằng `ownerEmailHash` trong `data.js`: đó là mã băm SHA-256 của Gmail, để địa chỉ email
    không nằm công khai trong code. Muốn đổi chủ trang, tạo mã băm mới (chữ thường, không dấu cách) rồi dán vào:
    ```powershell

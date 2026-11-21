@@ -525,8 +525,15 @@ body.dragging .drop-hint { display: block; }
 .img-btn { padding: 4px 10px; border: 0; border-radius: 8px; background: rgba(10, 13, 20, .78); color: #fff; font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
 .img-btn:hover { background: var(--accent); color: var(--accent-ink); }
 .img-btn.danger:hover { background: var(--danger); color: #fff; }
-.gallery figure.add-img { display: grid; flex-basis: min(60%, 260px); }
-.add-img-btn { min-height: 120px; aspect-ratio: 16 / 9; border: 2px dashed var(--border); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.gallery figure.add-img { display: grid; gap: 8px; align-content: center; flex-basis: min(60%, 260px); }
+/* Video YouTube trong dải ảnh: ảnh bìa + nút phát, bấm thì thay bằng khung phát */
+.yt-thumb { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+.gallery .yt-thumb img { cursor: pointer; }
+.yt-play { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.yt-play svg { filter: drop-shadow(0 2px 8px rgba(0, 0, 0, .45)); transition: transform .15s ease; }
+.yt-thumb:hover .yt-play svg, .yt-thumb:focus-visible .yt-play svg { transform: scale(1.1); }
+.yt-frame { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--border); border-radius: 8px; background: #000; }
+.add-img-btn { min-height: 64px; padding: 12px 10px; border: 2px dashed var(--border); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
 .add-img-btn:hover { border-color: var(--accent); color: var(--accent); }
 .link-edit { display: grid; grid-template-columns: 1fr 1.3fr auto; gap: 6px; align-items: center; }
 .le { width: 100%; min-width: 0; padding: 6px 10px; font: inherit; font-size: .88rem; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }

@@ -45,7 +45,9 @@
   // Chủ trang = tài khoản Google có email khớp ownerEmailHash (mã băm SHA-256 của email, để email không nằm công khai
   // trong code) hoặc có UID khớp ownerUid. Chủ trang làm gì cũng không bị gửi email báo. Mọi người khác (không đăng
   // nhập hoặc tài khoản khác) nhắn hay chỉnh sửa đều gửi email báo cho chủ trang.
-  const AUTH_ON = chatOn && CHAT.provider === "rtdb" && !!(CHAT.firebase && CHAT.firebase.apiKey);
+  // googleLogin: false (data.js) = ẩn hoàn toàn đăng nhập Google: không nút, không hộp thoại, không hộp gợi ý,
+  // không thông báo liên quan, không tải thư viện đăng nhập. Chủ trang quay về cách cũ (trình duyệt đã bấm Chỉnh sửa).
+  const AUTH_ON = chatOn && CHAT.provider === "rtdb" && CHAT.googleLogin !== false && !!(CHAT.firebase && CHAT.firebase.apiKey);
   const OWNER_UID = String(CHAT.ownerUid || "").trim();
   const OWNER_HASH = String(CHAT.ownerEmailHash || "").trim().toLowerCase();
   const AUTH_ENFORCED = AUTH_ON && !!(OWNER_UID || OWNER_HASH);
@@ -386,6 +388,37 @@
     return "";
   }
   const snapImages = (snap) => (snap.images || []).map((im) => ({ src: im.src || imgSrc(im.iid), caption: im.caption || "" })).filter((im) => im.src);
+
+  // ----- Video YouTube nằm chung danh sách với ảnh -----
+  // Một video được lưu như một "ảnh" có src = "yt:" + mã 11 ký tự của video. Nhờ vậy dùng chung cách lưu, phiên bản,
+  // sao lưu và quy tắc cơ sở dữ liệu của ảnh, không phải đổi gì ở Firebase. Video vẫn nằm ở YouTube, trang chỉ giữ mã.
+  const ytOf = (src) => { const m = /^yt:([A-Za-z0-9_-]{11})$/.exec(src || ""); return m ? m[1] : ""; };
+  function parseYouTube(input) {
+    let s = String(input || "").trim();
+    if (!s) return "";
+    if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s; // dán thẳng mã video
+    if (!/^[a-z]+:\/\//i.test(s)) s = "https://" + s;
+    let u;
+    try { u = new URL(s); } catch (e) { return ""; }
+    const host = u.hostname.replace(/^(www|m|music)\./, "");
+    let id = "";
+    if (host === "youtu.be") id = u.pathname.split("/")[1] || "";
+    else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+      id = u.searchParams.get("v") || "";
+      if (!id) { const m = /^\/(?:embed|shorts|live|v)\/([^/?#]+)/.exec(u.pathname); if (m) id = m[1]; }
+    }
+    return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : "";
+  }
+  // Phần hiển thị bên trong khung ảnh: ảnh bấm để phóng to, video hiện ảnh bìa + nút phát (bấm thì phát ngay tại chỗ)
+  function mediaHtml(im, gid, i, ver, alt) {
+    const yt = ytOf(im.src);
+    if (yt) {
+      return '<button type="button" class="yt-thumb" data-action="yt-play" data-yt="' + yt + '" aria-label="Phát video: ' + esc(alt) + '">' +
+        '<img loading="lazy" src="https://i.ytimg.com/vi/' + yt + '/hqdefault.jpg" alt="">' +
+        '<span class="yt-play" aria-hidden="true"><svg viewBox="0 0 68 48" width="68" height="48"><path d="M66.5 7.7A8.5 8.5 0 0 0 60.5 1.7C55.2.3 34 .3 34 .3S12.8.3 7.5 1.7A8.5 8.5 0 0 0 1.5 7.7C.1 13 .1 24 .1 24s0 11 1.4 16.3a8.5 8.5 0 0 0 6 6C12.8 47.7 34 47.7 34 47.7s21.2 0 26.5-1.4a8.5 8.5 0 0 0 6-6C67.9 35 67.9 24 67.9 24s0-11-1.4-16.3z" fill="#f00"/><path d="M45 24L27 14v20z" fill="#fff"/></svg></span></button>';
+    }
+    return '<img loading="lazy" src="' + esc(im.src) + '" alt="' + esc(alt) + '" data-action="zoom" data-game="' + esc(gid) + '"' + (ver ? ' data-ver="' + esc(ver) + '"' : "") + ' data-index="' + i + '">';
+  }
   function snapOf(g) { // ảnh chụp toàn bộ thông tin game ở thời điểm hiện tại
     const sec = DATA.sections.find((s) => s.games.some((x) => x.id === g.id));
     return {
@@ -438,7 +471,7 @@
       '<div class="progress"><div class="progress-top"><span>Tiến độ lúc đó</span><b>' + (s.progress || 0) + "%</b></div>" +
       '<div class="bar"><i style="width:' + (s.progress || 0) + '%"></i></div></div>';
     const gallery = imgs.length ? '<div class="gallery-wrap"><div class="gallery" tabindex="0" role="group" aria-label="Ảnh của ' + esc(s.name) + ' ở phiên bản ' + esc(v.version) + '">' +
-      imgs.map((im, i) => '<figure><div class="imgbox"><img loading="lazy" src="' + esc(im.src) + '" alt="' + esc(im.caption || s.name) + '" data-action="zoom" data-game="' + esc(g.id) + '" data-ver="' + esc(v.id) + '" data-index="' + i + '"></div>' +
+      imgs.map((im, i) => '<figure><div class="imgbox">' + mediaHtml(im, g.id, i, v.id, im.caption || s.name) + "</div>" +
         "<figcaption>" + esc(im.caption) + "</figcaption></figure>").join("") + "</div></div>" : "";
     const taskHtml = tasks.length ? '<ul class="tasks">' + tasks.map((t) => '<li class="task' + (t.done ? " done" : "") + '"><span class="mark" aria-hidden="true">' + (t.done ? "✓" : "") +
       '</span><span class="task-text">' + esc(t.text) + '</span><span class="sr-only">' + (t.done ? " (đã xong)" : " (chưa xong)") + "</span></li>").join("") + "</ul>" : '<p class="none">Không có việc nào.</p>';
@@ -492,11 +525,12 @@
       (imgs.length > 1 ? '<span class="gcount" aria-hidden="true">1 / ' + imgs.length + "</span>" : "") +
       '<div class="gallery" tabindex="0" role="group" aria-label="Ảnh của ' + esc(g.name) + '">' +
       imgs.map((im, i) =>
-        "<figure" + A(g, "img-" + (i + 1), "Ảnh " + (i + 1) + (im.caption ? ": " + im.caption : ""), cm) + '><div class="imgbox"><img loading="lazy" src="' + esc(im.src) + '" alt="' + esc(im.caption || g.name) + '" data-action="zoom" data-game="' + esc(g.id) + '" data-index="' + i + '">' +
-        (ui.editing ? '<div class="img-tools"><button type="button" class="img-btn" data-action="img-replace" data-game="' + esc(g.id) + '" data-index="' + i + '">Thay ảnh</button>' +
+        "<figure" + A(g, "img-" + (i + 1), (ytOf(im.src) ? "Video " : "Ảnh ") + (i + 1) + (im.caption ? ": " + im.caption : ""), cm) + '><div class="imgbox">' + mediaHtml(im, g.id, i, "", im.caption || g.name) +
+        (ui.editing ? '<div class="img-tools"><button type="button" class="img-btn" data-action="img-replace" data-game="' + esc(g.id) + '" data-index="' + i + '">' + (ytOf(im.src) ? "Đổi link" : "Thay ảnh") + "</button>" +
           '<button type="button" class="img-btn danger" data-action="img-del" data-game="' + esc(g.id) + '" data-index="' + i + '">Xóa</button></div>' : "") +
         "</div><figcaption>" + (ui.editing ? ed("cap", g.id, String(i), im.caption || "", "span", "", false, "Chú thích ảnh", "Chú thích ảnh") : esc(im.caption || "")) + "</figcaption></figure>").join("") +
-      (ui.editing ? '<figure class="add-img"><button type="button" class="add-img-btn" data-action="img-add" data-game="' + esc(g.id) + '">+ Thêm ảnh</button></figure>' : "") +
+      (ui.editing ? '<figure class="add-img"><button type="button" class="add-img-btn" data-action="img-add" data-game="' + esc(g.id) + '">+ Thêm ảnh</button>' +
+        '<button type="button" class="add-img-btn add-vid-btn" data-action="vid-add" data-game="' + esc(g.id) + '">+ Thêm video YouTube</button></figure>' : "") +
       "</div>" +
       '<button class="nav-btn next" data-action="scroll" data-dir="1" aria-label="Ảnh sau">›</button></div>' : "";
 
@@ -1242,6 +1276,10 @@
       const v = (g.versions || []).find((x) => x.id === verId);
       list = v && v.snap ? snapImages(v.snap) : [];
     }
+    // video YouTube phát ngay trong trang, không đưa vào khung phóng to ảnh
+    const target = list[idx];
+    list = list.filter((im) => !ytOf(im.src));
+    idx = Math.max(0, list.indexOf(target));
     if (!list.length) return;
     lbState.list = list; lbState.opener = opener;
     lbShow(idx);
@@ -1299,8 +1337,16 @@
   // Khi chưa có googleClientId (chưa hiện được hộp của Google): trên trình duyệt của chủ trang (đã từng bấm Chỉnh sửa)
   // tự mở hộp thoại "Đăng nhập Google" ngay khi vào, mỗi lần mở trình duyệt một lần. Người xem thông thường không thấy.
   function offerSignInDialog() {
-    if (!AUTH_ON || CHAT.autoPrompt === false || !legacyOwner()) return;
-    try { if (sessionStorage.getItem("game-progress-signin-offered") === "1") return; sessionStorage.setItem("game-progress-signin-offered", "1"); } catch (e) {}
+    if (!AUTH_ON) return;
+    // Thêm &login=1 vào link để luôn mở hộp đăng nhập (dùng được trên mọi trình duyệt, kể cả máy mới của chủ trang)
+    const forced = /[?&]login(=1|=true)?(&|$)/.test(location.search);
+    let mine = legacyOwner() || ui.editing; // trình duyệt từng dùng chế độ Chỉnh sửa
+    try { mine = mine || localStorage.getItem(MODE_KEY) === "1"; } catch (e) {}
+    if (!forced && (CHAT.autoPrompt === false || !mine)) return;
+    try {
+      if (!forced && sessionStorage.getItem("game-progress-signin-offered") === "1") return;
+      sessionStorage.setItem("game-progress-signin-offered", "1");
+    } catch (e) {}
     setTimeout(() => { if (!authUser) openAuth(); }, 600);
   }
   // Hộp gợi ý đăng nhập nhanh của Google (One Tap): vừa vào trang, nếu trình duyệt đang đăng nhập Gmail thì hiện
@@ -1449,6 +1495,13 @@
       gl.scrollBy({ left: Number(el.getAttribute("data-dir")) * gl.clientWidth * 0.7, behavior: "smooth" });
     } else if (act === "zoom") {
       lbOpen(el.getAttribute("data-game"), Number(el.getAttribute("data-index")), el, el.getAttribute("data-ver"));
+    } else if (act === "yt-play") { // bấm ảnh bìa: thay bằng khung phát YouTube và phát ngay
+      const f = document.createElement("iframe");
+      f.className = "yt-frame"; f.title = "Video YouTube";
+      f.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(el.getAttribute("data-yt")) + "?autoplay=1&rel=0&modestbranding=1";
+      f.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen";
+      f.setAttribute("allowfullscreen", "");
+      el.replaceWith(f);
     } else if (act === "resolve-comment") {
       resolveComment(el.getAttribute("data-game"), id, el.getAttribute("data-to") === "1");
     } else if (act === "toggle-resolved") {
@@ -1801,6 +1854,22 @@
       img.src = url;
     });
   }
+  // Thêm hoặc đổi link video YouTube của một mục trong dải ảnh (index = -1: thêm mới)
+  function promptVideo(gid, index) {
+    const g = findGame(gid);
+    if (!g) return;
+    const arr = imagesOf(g);
+    const old = index >= 0 ? arr[index] : null;
+    const input = window.prompt("Dán link video YouTube (ví dụ https://www.youtube.com/watch?v=… hoặc https://youtu.be/…).\nNên để video ở chế độ \"Không công khai\" nếu chưa muốn ai tìm thấy.", old && ytOf(old.src) ? "https://youtu.be/" + ytOf(old.src) : "");
+    if (input == null) return;
+    const id = parseYouTube(input);
+    if (!id) { toast("Link YouTube chưa đúng. Thử dán lại link trong thanh địa chỉ khi đang xem video."); return; }
+    const item = { src: "yt:" + id, caption: old ? old.caption || "" : "", iid: sanitizeId("yt-" + id + "-" + Date.now().toString(36)) };
+    if (old) arr[index] = item; else arr.push(item);
+    state.images[gid] = arr;
+    save(); render();
+    toast(old ? "Đã đổi video." : "Đã thêm video.");
+  }
   function pickImage(gid, index) {
     const inp = document.createElement("input");
     inp.type = "file"; inp.accept = "image/*";
@@ -1912,8 +1981,9 @@
       const before = linksOf(g), arr = linksOf(g); arr.splice(i, 1);
       state.links[gid] = arr; save(); render();
       toast("Đã xóa tài liệu", () => { state.links[gid] = before; save(); render(); });
-    } else if (act === "img-replace" && g) pickImage(gid, i);
+    } else if (act === "img-replace" && g) { const cur = imagesOf(g)[i]; if (cur && ytOf(cur.src)) promptVideo(gid, i); else pickImage(gid, i); }
     else if (act === "img-add" && g) pickImage(gid, -1);
+    else if (act === "vid-add" && g) promptVideo(gid, -1);
     else if (act === "img-del" && g) {
       const before = imagesOf(g), arr = imagesOf(g); arr.splice(i, 1);
       state.images[gid] = arr; save(); render();
