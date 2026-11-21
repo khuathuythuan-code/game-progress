@@ -458,6 +458,20 @@ body.editing .toast { bottom: 130px; }
 }
 .to-top:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
+/* Nút nổi Thu gọn / Mở rộng tất cả: ngay dưới header, sát mép phải vùng nội dung (top do JS đặt) */
+@media (min-width: 900px) { #app { padding-right: 68px; } } /* dải trống ở mép phải các thẻ game cho nút tròn Thu gọn tất cả */
+.fab-collapse {
+  position: fixed; z-index: 24; top: 160px; left: 0; display: grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--text);
+  cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, .16);
+}
+.fab-collapse:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.fab-collapse .ico-unfold, .fab-collapse.is-closed .ico-fold { display: none; }
+.fab-collapse.is-closed .ico-unfold { display: block; }
+.mobile-only { display: none; }
+@media (max-width: 899px) { .fab-collapse { display: none !important; } .nav-tool.mobile-only { display: block; } }
+body.gated .fab-collapse { display: none !important; }
+
 /* ---------- Bộ lọc ---------- */
 /* Thanh lọc nằm trong header dính, hàng thứ hai */
 .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; width: 100%; max-width: 980px; margin: 0 auto; min-width: 0; }
@@ -531,6 +545,9 @@ body.dragging .drop-hint { display: block; }
 .gh-dialog textarea { width: 100%; padding: 9px 12px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; resize: vertical; }
 .gh-actions { display: flex; gap: 8px; margin-top: 14px; }
 .auth-msg { min-height: 1.4em; margin: 8px 0 0; color: var(--accent); }
+.google-btn { display: inline-flex; align-items: center; gap: 8px; background: #fff; color: #1f2430; border-color: #d0d5df; }
+.google-btn:hover { filter: none; background: #f3f5f9; }
+.google-btn:disabled { opacity: .6; cursor: default; }
 .auth-link { justify-self: center; text-decoration: none; color: var(--muted); }
 .auth-link:hover { color: var(--accent); text-decoration: underline; }
 .gh-dialog input[readonly] { font-family: ui-monospace, Consolas, monospace; font-size: .82rem; }
@@ -656,7 +673,7 @@ body.annotating [data-annot] { outline: 1px dashed color-mix(in srgb, var(--acce
   .tool .chev { transition: none; }
 }
 @media print {
-  .sidebar, .rside, .edge-btn, .rs-edge, .chat-btn, .theme-btn, .menu-btn, .nav-backdrop, .topbar, .nav-btn, .icon-btn, .tool, .foot, .editbar, .add-task, .composer, .send-pill, .gcount, .skip, .link-btn, .annot-chip, .annot-pop { display: none !important; }
+  .sidebar, .rside, .edge-btn, .rs-edge, .fab-collapse, .chat-btn, .theme-btn, .menu-btn, .nav-backdrop, .topbar, .nav-btn, .icon-btn, .tool, .foot, .editbar, .add-task, .composer, .send-pill, .gcount, .skip, .link-btn, .annot-chip, .annot-pop { display: none !important; }
   .content { margin-left: 0; margin-right: 0; }
   .hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .game { break-inside: avoid; }

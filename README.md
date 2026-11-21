@@ -58,7 +58,7 @@ Chưa điền cấu hình Firebase (`provider: ""`) thì trang hiện dữ liệ
 trình duyệt này.
 
 ## Dùng hằng ngày
-- **Bố cục ba cột**: **thanh bên trái** (điều hướng mục và game, Thu gọn tất cả, nút **Chỉnh sửa**), nội dung ở giữa,
+- **Bố cục ba cột**: **thanh bên trái** (điều hướng mục và game, nút **Chỉnh sửa**, đổi giao diện sáng/tối), nội dung ở giữa,
   **thanh bên phải** (khung **Trao đổi**). Hai thanh bên đều **thu gọn được**: nút ‹ ở đầu thanh trái; khung phải
   có một **tay nắm nổi** (nút ›) nằm đúng mép giữa nội dung và khung, bấm để thu gọn, khi thu gọn nó dính vào mép
   phải màn hình (nút ‹) để mở lại. Thanh trái mở lại bằng nút nhỏ ở mép trái; nút **Trao đổi** trên header cũng mở/đóng khung phải. Máy tính nhớ lựa chọn của bạn
@@ -76,16 +76,16 @@ trình duyệt này.
     ô bên phải (dùng cho điện thoại). Sang "Hoàn thành" thì tiến độ thành 100%, sang "Dự kiến" thì về 0%.
   - Mọi thao tác xóa/chuyển có nút **Hoàn tác** trong 7 giây.
 - **Xem**: mặc định gọn, không có nút sửa/xóa. Sếp thấy thay đổi của bạn ngay, không cần tải lại trang.
+- **Thu gọn / Mở rộng tất cả game**: nút tròn nằm ngay dưới thanh header, trong dải trống bên phải các thẻ game (trên điện thoại nằm trong menu trái).
 - **Lọc game**: nằm trên **thanh header dính** ở đầu trang (cuộn trang vẫn thấy): ô tìm kiếm (gõ không dấu vẫn
   tìm được), lọc theo mục và theo thể loại. Thanh bên trái cũng cập nhật theo bộ lọc.
 - **Giao diện sáng/tối**: nút ở thanh header đổi vòng **Tự động** (theo hệ thống) → **Sáng** → **Tối**. Lựa chọn được
   nhớ riêng trên từng trình duyệt, nên bạn và sếp có thể dùng giao diện khác nhau.
-- **Nhận xét và chat**: **mọi phần giao diện đều nhận xét được**: rê chuột vào bất kỳ phần nào rồi bấm
-  **Nhận xét**. Gồm nội dung từng game (tên, ảnh, tiến độ, phiên bản, bản vá, mô tả, từng việc, từng link) và cả các
-  phần chung: tiêu đề trang, ngày cập nhật, bảng tổng quan, tiêu đề mục, thanh lọc, nút **Trao đổi**. Riêng hai thanh
-  bên (menu trái, khung Trao đổi phải) thì không cần nhận xét nên không có nút này. Nhận xét về
-  các phần chung nằm ở mục **Toàn trang** trong khung Trao đổi. Với phần nhỏ (nút, ô nhập) nút "Nhận xét" hiện sát
-  bên dưới để không che mất chính phần đó. Trên điện thoại, bấm nút **Nhận xét** ở thanh bên rồi chạm vào phần cần
+- **Nhận xét và chat**: nội dung **từng game** nhận xét được: rê chuột vào phần nào (tên, ảnh, tiến độ, phiên bản,
+  bản vá, mô tả, từng việc, từng link) rồi bấm **Nhận xét**. Phần đầu trang (tiêu đề, ngày cập nhật, bảng tổng quan,
+  thanh tìm kiếm và lọc, nút **Trao đổi**, tiêu đề các mục) và hai thanh bên **không** có nút nhận xét. Muốn nhận xét
+  chung về cả trang, chọn **Toàn trang** ở ô "Viết về" trong khung Trao đổi. Với phần nhỏ (nút, ô nhập) nút "Nhận xét"
+  hiện sát bên dưới để không che mất chính phần đó. Trên điện thoại, bấm nút **Nhận xét** ở thanh bên rồi chạm vào phần cần
   nhận xét (ở chế độ này chạm vào đâu cũng là chọn phần đó; bấm lại nút để thoát).
   - **Khung Trao đổi bên phải** thay cho khung ở cuối từng game: mặc định là **Tất cả nhận xét** (gom nhận xét của
     toàn trang và mọi game theo thời gian, mỗi tin có nhãn game, bấm nhãn để nhảy tới game đó; muốn viết thì chọn
@@ -118,21 +118,33 @@ trình duyệt này.
   chỉnh sửa. **Nhập sẽ thay toàn bộ nội dung hiện tại.** Không có lịch sử git cho nội dung, nên hãy
   tải bản sao lưu định kỳ.
 
-## Đăng nhập chủ trang bằng email (tùy chọn, làm một lần)
-Mặc định trang nhận ra chủ trang bằng việc trình duyệt đã bấm **Chỉnh sửa**. Muốn chắc chắn hơn (đổi máy vẫn đúng,
-và người có link bí mật không thể sửa nội dung), dùng đăng nhập bằng link gửi qua email, **không mật khẩu**.
-Sếp và người xem vẫn vào bằng link bí mật, không phải đăng nhập.
-1. Firebase Console > **Authentication** > **Get started**. Mục **Sign-in method** > **Email/Password** > bật,
-   và bật thêm **Email link (passwordless sign-in)** > Save.
+## Chủ trang đăng nhập Google: không gửi email cho chính mình
+Trang nhận ra chủ trang bằng tài khoản Google (Gmail) đang đăng nhập, không phải bằng mật khẩu riêng.
+- **Chủ trang** (đăng nhập đúng Gmail đã khai báo): nhắn, chỉnh sửa, xóa nhận xét đều **không** gửi email.
+- **Mọi người khác** (không đăng nhập, hoặc đăng nhập tài khoản Google khác): nhắn nhận xét gửi email ngay; chỉnh
+  sửa nội dung thì gom lại và gửi **một email tóm tắt** sau khoảng 90 giây (hoặc khi họ rời trang): ai sửa, game nào,
+  ảnh, phiên bản. Họ vẫn sửa được, chỉ là bạn được báo.
+- Sếp vào bằng link bí mật, không cần đăng nhập gì cả.
+
+Làm một lần:
+1. Firebase Console > **Authentication** > **Get started**. Mục **Sign-in method** > **Google** > bật **Enable**,
+   chọn **Support email** > **Save** (phải bấm Save thì mới có hiệu lực).
 2. **Authentication > Settings > Authorized domains** > thêm `khuathuythuan-code.github.io`.
-3. Mở trang bằng link bí mật của bạn, bấm **Chỉnh sửa** một lần để trình duyệt nhận ra bạn là chủ trang, rồi bấm
-   **Đăng nhập email** ở chân thanh bên trái. Nhập email, mở link trong thư. Hộp thoại sẽ hiện **UID** của bạn
-   (mã định danh, không chứa email) kèm nút sao chép.
-4. Dán UID vào `ownerUid` trong `data.js` (mục `db`), rồi push. Từ đây chỉ tài khoản đó vào được chế độ Chỉnh sửa.
-5. Muốn chặn cả phía máy chủ: mở `database.rules.owner.json`, thay `OWNER_UID_HERE` bằng UID, dán vào
-   Realtime Database > Rules > Publish. Khi đó chỉ chủ trang ghi được nội dung (game, ảnh, phiên bản); người có
-   link bí mật vẫn đọc được và vẫn nhắn được. Nếu đổi quy tắc này mà không đăng nhập được thì chỉnh sửa sẽ bị từ chối,
-   khi đó dán lại `database.rules.json` để về như cũ.
+3. Trên mỗi trình duyệt của bạn: mở trang bằng link bí mật, bấm **Chỉnh sửa**, rồi bấm **Đăng nhập Google** ở chân
+   thanh bên trái và chọn Gmail chủ trang. **Chỉ cần làm một lần cho mỗi trình duyệt**: Firebase nhớ phiên, các lần
+   sau trang tự nhận bạn là chủ trang. (Trang web không được phép tự đọc Gmail đang dùng trong trình duyệt nếu bạn
+   chưa đồng ý một lần, đây là quy định của Google.) Nếu trình duyệt chặn cửa sổ đăng nhập, hãy cho phép pop-up.
+4. Chủ trang được khai báo bằng `ownerEmailHash` trong `data.js`: đó là mã băm SHA-256 của Gmail, để địa chỉ email
+   không nằm công khai trong code. Muốn đổi chủ trang, tạo mã băm mới (chữ thường, không dấu cách) rồi dán vào:
+   ```powershell
+   $e = "email.cua.ban@gmail.com"
+   -join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($e.ToLower())) | ForEach-Object { $_.ToString("x2") })
+   ```
+5. Tùy chọn, chặn hẳn phía máy chủ (người khác không sửa được nội dung nữa, chỉ nhắn được): mở
+   `database.rules.owner.json`, thay `OWNER_EMAIL_HERE` bằng Gmail chủ trang, dán vào Realtime Database > Rules >
+   Publish. Khi đó bước email tóm tắt chỉnh sửa không còn cần cho người khác vì họ không ghi được. Nếu bị khóa
+   không sửa được, dán lại `database.rules.json` để về như cũ. Đừng commit file rules đã điền email nếu bạn muốn
+   giữ email không công khai.
 
 ## Giới hạn cần biết
 - Ảnh nằm trong cơ sở dữ liệu nên mỗi ảnh được nén còn khoảng 100 đến 300KB; Firestore giới hạn 1MB mỗi tài liệu.

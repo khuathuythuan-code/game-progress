@@ -42,12 +42,30 @@
   const canComment = !chatOn || !!room; // bật chat mà không có link bí mật thì chỉ xem
   // Đăng nhập email (Firebase Authentication, link gửi qua email, không mật khẩu) để xác nhận chủ trang.
   // AUTH_ON: có apiKey nên đăng nhập được. AUTH_ENFORCED: đã khai báo ownerUid, chỉ đúng tài khoản đó là chủ trang.
+  // Chủ trang = tài khoản Google có email khớp ownerEmailHash (mã băm SHA-256 của email, để email không nằm công khai
+  // trong code) hoặc có UID khớp ownerUid. Chủ trang làm gì cũng không bị gửi email báo. Mọi người khác (không đăng
+  // nhập hoặc tài khoản khác) nhắn hay chỉnh sửa đều gửi email báo cho chủ trang.
   const AUTH_ON = chatOn && CHAT.provider === "rtdb" && !!(CHAT.firebase && CHAT.firebase.apiKey);
   const OWNER_UID = String(CHAT.ownerUid || "").trim();
-  const AUTH_ENFORCED = AUTH_ON && !!OWNER_UID;
-  let authUser = null;  // người đang đăng nhập (null = chưa)
+  const OWNER_HASH = String(CHAT.ownerEmailHash || "").trim().toLowerCase();
+  const AUTH_ENFORCED = AUTH_ON && !!(OWNER_UID || OWNER_HASH);
+  let authUser = null;      // người đang đăng nhập (null = chưa)
+  let authIsOwner = false;  // người đó có phải chủ trang không (tính xong sau khi đăng nhập)
   const legacyOwner = () => { try { return localStorage.getItem(OWNER_KEY) === "1"; } catch (e) { return false; } };
-  const isOwner = () => AUTH_ENFORCED ? (!!authUser && authUser.uid === OWNER_UID) : legacyOwner();
+  // Khi đã khai báo chủ trang: chỉ đăng nhập đúng tài khoản mới là chủ. Chưa khai báo: trình duyệt đã bấm Chỉnh sửa là chủ (như cũ).
+  const isOwner = () => AUTH_ENFORCED ? authIsOwner : (ui.editing || legacyOwner());
+  async function sha256Hex(s) {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+  async function computeOwner(u) {
+    if (!u) return false;
+    if (OWNER_UID && u.uid === OWNER_UID) return true;
+    if (OWNER_HASH && u.email && u.emailVerified !== false) {
+      try { return (await sha256Hex(String(u.email).trim().toLowerCase())) === OWNER_HASH; } catch (e) { return false; }
+    }
+    return false;
+  }
   let remote = [];      // tin nhắn từ máy chủ chat
   let chatApi = null;   // adapter đã kết nối
   let chatReady = false;
@@ -127,7 +145,6 @@
   } catch (e) {
     ui.editing = /[?&]edit/.test(location.search);
   }
-  if (AUTH_ENFORCED) ui.editing = false; // chỉ bật lại sau khi đăng nhập xác nhận đúng chủ trang
   // Nhận xét đi kèm trong link email (?cm=...): chỉ để hiển thị, không lưu
   try {
     const raw = new URLSearchParams(location.search).get("cm");
@@ -200,22 +217,11 @@
     if (cm[tid]) el.setAttribute("data-ccount", cm[tid]); else el.removeAttribute("data-ccount");
   }
   // Gắn dấu "nhận xét được" cho mọi phần giao diện chung. Gọi lại sau mỗi lần vẽ vì một số phần được vẽ lại.
-  function markSiteTargets() {
-    if (!canComment) return;
-    const cm = targetCounts(SITE_GAME);
-    const txt = (el, sel) => { const x = sel ? el.querySelector(sel) : el; return x ? x.textContent.replace(/\s+/g, " ").trim() : ""; };
-    tagSite($("title"), "title", "Tiêu đề trang", cm);
-    tagSite(document.querySelector(".hero .updated"), "updated", "Ngày cập nhật lần cuối", cm);
-    document.querySelectorAll("#board .lane").forEach((el) => tagSite(el, "lane-" + el.getAttribute("data-key"), "Bảng tổng quan: " + txt(el, ".lane-label b"), cm));
-    document.querySelectorAll("#board .chip").forEach((el) => tagSite(el, "chip-" + el.getAttribute("data-game"), "Ô game ở bảng tổng quan: " + txt(el, ".chip-name"), cm));
-    tagSite($("filterbar"), "filter", "Thanh tìm kiếm và lọc", cm);
-    tagSite($("f-q"), "f-q", "Ô tìm kiếm", cm);
-    tagSite($("f-sec"), "f-sec", "Nút lọc theo mục", cm);
-    tagSite($("f-genre"), "f-genre", "Ô lọc theo thể loại", cm);
-    document.querySelectorAll(".section-head").forEach((el) => { const s = el.closest(".section"); if (s) tagSite(el, "sec-" + s.getAttribute("data-key"), "Tiêu đề mục: " + txt(el, "h2"), cm); });
-    // Hai thanh bên (trái: điều hướng, phải: Trao đổi) KHÔNG nhận xét được; chỉ nút Trao đổi trên header thì có.
-    tagSite($("chat-btn"), "chatbtn", "Nút Trao đổi", cm);
-  }
+  // Hiện KHÔNG phần nào của phần đầu trang nhận xét được: tiêu đề, ngày cập nhật, bảng tổng quan, thanh tìm kiếm và lọc,
+  // nút Trao đổi, tiêu đề các mục, và hai thanh bên. Chỉ nội dung từng game (ảnh, tiến độ, mô tả, việc, link, phiên bản…)
+  // nhận xét được. Nhận xét chung về cả trang vẫn viết được ở mục "Toàn trang" của khung Trao đổi.
+  // Hàm giữ lại (không làm gì) để các chỗ gọi sau mỗi lần vẽ lại không phải sửa.
+  function markSiteTargets() { /* không gắn dấu nhận xét cho phần giao diện chung */ }
   function findTask(id) {
     for (const sec of DATA.sections) for (const g of sec.games) {
       const t = allTasks(g).find((x) => x.id === id);
@@ -276,7 +282,7 @@
 
   function renderMsg(g, c, withTag, withGame) {
     // Người viết, hoặc chủ trang (trình duyệt đã từng bấm Chỉnh sửa), được xóa hoặc đánh dấu "đã giải quyết" (ẩn đi)
-    const canAct = c.mine || ui.editing || isOwner();
+    const canAct = c.mine || isOwner();
     const canResolve = canAct && (c.remote || c.mine);
     return msgShell({
       cls: (c.mine ? " mine" : "") + (c.resolved ? " resolved" : ""), author: c.author, time: c.time, text: c.text,
@@ -651,7 +657,9 @@
         "</section>";
     });
     if (!appHtml) appHtml = '<div class="empty">Không có game nào khớp bộ lọc.</div>';
-    tabsHtml += '<div class="nav-tools"><button type="button" class="nav-tool" data-action="toggle-all" id="toggle-all"></button>' +
+    // Máy tính: Thu gọn/Mở rộng tất cả là nút tròn #toggle-all ở mép phải các thẻ game (index.html).
+    // Điện thoại không có chỗ trống ở mép phải nên nút này nằm trong menu trái (nav-tool mobile-only).
+    tabsHtml += '<div class="nav-tools"><button type="button" class="nav-tool mobile-only" data-action="toggle-all" id="toggle-all-m"></button>' +
       (canComment ? '<button type="button" class="nav-tool touch-only' + (ui.annotating ? " on" : "") + '" data-action="annot-mode" aria-pressed="' + ui.annotating + '">Nhận xét</button>' : "") + "</div>";
     $("side-title").textContent = DATA.title;
 
@@ -699,8 +707,23 @@
   function updateToggleAll() {
     const b = $("toggle-all");
     if (!b) return;
-    const anyOpen = Array.from(document.querySelectorAll(".game")).some((el) => !ui.collapsed[el.id.slice(2)]);
-    b.textContent = anyOpen ? "Thu gọn tất cả" : "Mở rộng tất cả";
+    const games = document.querySelectorAll(".game");
+    const anyOpen = Array.from(games).some((el) => !ui.collapsed[el.id.slice(2)]);
+    const label = anyOpen ? "Thu gọn tất cả" : "Mở rộng tất cả";
+    $("toggle-all-lbl").textContent = label;
+    $("toggle-all-m").textContent = label;
+    b.title = label;
+    b.classList.toggle("is-closed", !anyOpen); // đổi biểu tượng thu gọn / mở rộng
+    b.hidden = !games.length;
+    placeToggleAll();
+  }
+  // Nút tròn nằm ngay dưới thanh header, trong dải trống ở mép phải các thẻ game (#app chừa padding-right).
+  // Khi header chưa dính lên đầu (đang ở đầu trang) thì nó đi theo mép dưới của header.
+  function placeToggleAll() {
+    const tb = $("topbar"), b = $("toggle-all"), main = $("app");
+    if (!tb || !b || !main) return;
+    b.style.top = (Math.max(Math.round(tb.getBoundingClientRect().bottom), 0) + 48) + "px";
+    b.style.left = Math.round(main.getBoundingClientRect().right - 54) + "px";
   }
 
   // ---------- Làm nổi mục đang xem trên thanh điều hướng ----------
@@ -747,7 +770,9 @@
     if (!spyQueued) { spyQueued = true; requestAnimationFrame(updateSpy); }
     if (hoverEl && !chip.hidden) placeChip(hoverEl);
     $("to-top").hidden = window.scrollY < 500; // nút cuộn lên đầu trang chỉ hiện khi đã cuộn xuống
+    placeToggleAll();
   }, { passive: true });
+  window.addEventListener("resize", placeToggleAll);
   $("to-top").addEventListener("click", () => window.scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" }));
 
   // đếm ảnh "2 / 4" khi cuộn dải ảnh
@@ -826,7 +851,7 @@
   function deleteComment(gid, id) {
     if (chatOn) {
       const m = remote.find((x) => x.id === id);
-      if (m && chatApi && (m.cid === myCid || ui.editing || isOwner())) { // người viết hoặc chủ trang
+      if (m && chatApi && (m.cid === myCid || isOwner())) { // người viết hoặc chủ trang
         const backup = Object.assign({}, m);
         chatApi.remove(id).then(() => {
           toast("Đã xóa tin nhắn", () => { chatApi.restore(backup).catch(() => toast("Không khôi phục được tin nhắn")); });
@@ -840,7 +865,7 @@
       const removed = mineList.splice(idx, 1)[0];
       save(); render();
       toast("Đã xóa nhận xét", () => { (state.comments[gid] = state.comments[gid] || []).push(removed); save(); render(); });
-    } else if (ui.editing || isOwner()) {
+    } else if (isOwner()) {
       state.delComments.push(id); save(); render();
       toast("Đã xóa nhận xét", () => { state.delComments = state.delComments.filter((x) => x !== id); save(); render(); });
     }
@@ -1018,7 +1043,7 @@
 
   // ---------- Gửi thông báo qua email (dịch vụ form) ----------
   const notifyConfigured = () => !!(DATA.notify && DATA.notify.url);
-  function postNotify(subject, message, name) {
+  function postNotify(subject, message, name, keepalive) {
     const n = DATA.notify;
     const body = { subject: subject, name: name || "Người xem", from_name: name || "Người xem", message: message };
     if (n.accessKey) body.access_key = n.accessKey;
@@ -1026,7 +1051,8 @@
     return fetch(n.url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      keepalive: !!keepalive // gửi được cả khi người dùng vừa đóng trang
     }).then((r) => {
       if (!r.ok) throw new Error("http " + r.status);
       // Dịch vụ có thể trả 200 nhưng báo thất bại (ví dụ chưa kích hoạt email) → coi là chưa gửi được
@@ -1036,6 +1062,46 @@
       });
     });
   }
+  // ---------- Báo email khi người KHÔNG phải chủ trang chỉnh sửa nội dung ----------
+  // Mỗi lần tự lưu chỉ ghi nhận thay đổi; gom lại và gửi một email tóm tắt sau 90 giây (hoặc khi họ rời trang),
+  // để không bị gửi một thư cho mỗi chữ gõ. Chủ trang chỉnh sửa thì không gửi gì.
+  const editLog = { n: 0, games: {}, imgAdd: 0, imgDel: 0, imgMod: 0, ver: 0, site: false };
+  let editT = null;
+  function summarizeOps(ops) {
+    const s = { n: ops.length, games: {}, imgAdd: 0, imgDel: 0, imgMod: 0, ver: 0, site: false };
+    const gname = (id) => { const g = findGame(id); return (g && g.name) || (remoteGames[id] && remoteGames[id].name) || id; };
+    ops.forEach((o) => {
+      if (o.col === "content") s.site = true;
+      else if (o.col === "games") s.games[o.id] = (o.t === "del" ? "xóa " : "") + gname(o.id);
+      else if (o.col === "images") { if (o.t === "del") s.imgDel++; else if (o.merge) s.imgMod++; else s.imgAdd++; }
+      else if (o.col === "versions") s.ver++;
+    });
+    return s;
+  }
+  function noteEdits(s) {
+    editLog.n += s.n; editLog.imgAdd += s.imgAdd; editLog.imgDel += s.imgDel; editLog.imgMod += s.imgMod; editLog.ver += s.ver;
+    editLog.site = editLog.site || s.site;
+    Object.keys(s.games).forEach((id) => { editLog.games[id] = s.games[id]; });
+    if (!editT) editT = setTimeout(() => flushEditNotice(false), 90000);
+  }
+  function flushEditNotice(keepalive) {
+    clearTimeout(editT); editT = null;
+    if (!editLog.n || !notifyConfigured()) return;
+    const who = ui.name || (authUser && authUser.displayName) || "Người xem";
+    const lines = ['Có người không phải chủ trang vừa chỉnh sửa nội dung "' + DATA.title + '".', "Người sửa: " + who + (authUser && authUser.email ? " (" + authUser.email + ")" : " (chưa đăng nhập)")];
+    const names = Object.keys(editLog.games).map((id) => editLog.games[id]);
+    if (names.length) lines.push("Game đã đổi: " + names.join(", "));
+    if (editLog.imgAdd || editLog.imgDel || editLog.imgMod) lines.push("Ảnh: thêm " + editLog.imgAdd + ", xóa " + editLog.imgDel + ", sửa " + editLog.imgMod);
+    if (editLog.ver) lines.push("Phiên bản thay đổi: " + editLog.ver);
+    if (editLog.site) lines.push("Nội dung chung của trang (tiêu đề, các mục) có thay đổi");
+    lines.push("Mở trang: " + pageUrl());
+    editLog.n = 0; editLog.games = {}; editLog.imgAdd = editLog.imgDel = editLog.imgMod = editLog.ver = 0; editLog.site = false;
+    postNotify("Nội dung trang vừa được chỉnh sửa: " + DATA.title, lines.join("\n"), who, keepalive)
+      .catch(() => { if (!keepalive) toast("Đã lưu chỉnh sửa, nhưng chưa gửi được email báo cho chủ trang."); });
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushEditNotice(true); });
+  window.addEventListener("pagehide", () => flushEditNotice(true));
+
   // Link mở đúng phần được nhận xét, kèm nội dung để hiện ngay trong bong bóng
   function linkFor(g, c) {
     const base = pageUrl();
@@ -1126,7 +1192,7 @@
       render();
       chatApi.add(m).then(() => {
         if (!notifyConfigured()) return;
-        if (ui.editing || isOwner()) { // chủ trang tự nhắn thì không báo email cho chính mình, nhưng nói rõ để khỏi nhầm là lỗi
+        if (isOwner()) { // chủ trang tự nhắn thì không báo email cho chính mình, nhưng nói rõ để khỏi nhầm là lỗi
           if (!ownerNoticeShown) {
             ownerNoticeShown = true;
             toast("Đã gửi. Trình duyệt này là của chủ trang nên không gửi email báo. Thử email bằng nút “Gửi email thử” hoặc dùng cửa sổ ẩn danh.");
@@ -1146,7 +1212,7 @@
     (state.comments[g.id] = state.comments[g.id] || []).push(c);
     ui.drafts[draftKey] = "";
     save(); render();
-    if (!ui.editing && !isOwner() && notifyConfigured()) {
+    if (!isOwner() && notifyConfigured()) {
       toast("Đang gửi nhận xét…");
       postNotify(subjectFor(g, c), buildFeedback([{ g: g, c: c }]), author)
         .then(() => { c.notified = true; save(); render(); toast("Đã gửi nhận xét cho người làm"); })
@@ -1218,61 +1284,44 @@
   });
 
   // ---------- Chế độ xem / chỉnh sửa ----------
-  // ---------- Đăng nhập chủ trang bằng email ----------
-  const SIGNIN_EMAIL_KEY = "game-progress-signin-email";
+  // ---------- Đăng nhập chủ trang bằng Google (Gmail) ----------
   let authApi = null; // { am: module firebase-auth, auth }
   async function initAuth(app, am) {
     const auth = am.getAuth(app);
     authApi = { am: am, auth: auth };
     const first = new Promise((res) => {
-      am.onAuthStateChanged(auth, (u) => { authUser = u; onAuthChange(); res(); }, () => res());
+      am.onAuthStateChanged(auth, async (u) => { authUser = u; authIsOwner = await computeOwner(u); onAuthChange(); res(); }, () => res());
     });
-    if (am.isSignInWithEmailLink(auth, location.href)) { // vừa bấm link trong email
-      let email = "";
-      try { email = localStorage.getItem(SIGNIN_EMAIL_KEY) || ""; } catch (e) {}
-      if (!email) email = (prompt("Nhập email bạn đã dùng để nhận link đăng nhập:") || "").trim();
-      if (email) {
-        try {
-          await am.signInWithEmailLink(auth, email, location.href);
-          try { localStorage.removeItem(SIGNIN_EMAIL_KEY); localStorage.setItem(MODE_KEY, "1"); } catch (e) {}
-          toast("Đã đăng nhập bằng email");
-        } catch (e) { toast("Link đăng nhập không dùng được hoặc đã hết hạn. Hãy gửi link mới."); }
-      }
-      try { history.replaceState(null, "", location.pathname + (room ? "?k=" + room : "") + location.hash); } catch (e) {} // bỏ mã đăng nhập khỏi thanh địa chỉ
-    }
-    await Promise.race([first, new Promise((r) => setTimeout(r, 5000))]);
+    await Promise.race([first, new Promise((r) => setTimeout(r, 5000))]); // đợi biết đã đăng nhập sẵn chưa, tối đa 5 giây
   }
   function onAuthChange() {
-    if (AUTH_ENFORCED) {
-      if (isOwner()) { try { ui.editing = localStorage.getItem(MODE_KEY) === "1"; } catch (e) { ui.editing = false; } }
-      else ui.editing = false;
-    }
     refreshAuthUi();
     try { render(); } catch (e) {}
   }
   const authMsg = (t) => { $("auth-msg").textContent = t || ""; };
   function refreshAuthUi() {
-    // Khi chưa khai báo ownerUid, chỉ trình duyệt của chủ trang (đã từng bấm Chỉnh sửa) mới thấy nút đăng nhập, người xem thì không
-    $("auth-btn").hidden = !(AUTH_ON && (authUser || (!OWNER_UID && legacyOwner())));
-    $("auth-btn").textContent = authUser ? "Tài khoản đăng nhập" : "Đăng nhập email";
+    // Nút đăng nhập chỉ hiện khi đang ở chế độ Chỉnh sửa (hoặc đã đăng nhập), người xem thông thường không thấy
+    $("auth-btn").hidden = !(AUTH_ON && (authUser || ui.editing || legacyOwner()));
+    $("auth-btn").textContent = authUser ? "Tài khoản đăng nhập" : "Đăng nhập Google";
     $("auth-out").hidden = !!authUser;
     $("auth-in").hidden = !authUser;
     if (!authUser) return;
     $("auth-who").textContent = authUser.email || "(không có email)";
-    $("auth-uid-box").hidden = !!OWNER_UID;
+    $("auth-uid-box").hidden = AUTH_ENFORCED;
     $("auth-uid").textContent = authUser.uid;
-    $("auth-status").textContent = !OWNER_UID ? "Chưa khai báo chủ trang. Hãy lấy mã UID bên dưới để khai báo." :
-      isOwner() ? "Đúng chủ trang. Bạn dùng được chế độ Chỉnh sửa, xóa mọi nhận xét và không bị gửi email báo cho chính mình." :
-      "Tài khoản này không phải chủ trang nên không vào được chế độ Chỉnh sửa.";
+    $("auth-status").textContent = !AUTH_ENFORCED ? "Chưa khai báo chủ trang (ownerEmailHash trong data.js). Mã UID bên dưới dùng để khai báo." :
+      authIsOwner ? "Đúng chủ trang. Chỉnh sửa, nhận xét hay xóa đều không gửi email báo cho chính bạn." :
+      "Tài khoản này không phải chủ trang. Chỉnh sửa và nhận xét của bạn vẫn được gửi email báo cho chủ trang.";
   }
   function authErrorText(e) {
     const c = (e && e.code) || "";
-    if (c === "auth/configuration-not-found") return "Dự án Firebase chưa bật Authentication. Vào Firebase Console > Authentication > bấm Get started, rồi bật Email/Password và Email link.";
-    if (c === "auth/operation-not-allowed") return "Firebase chưa bật đăng nhập bằng link email (Authentication > Sign-in method > Email/Password > bật Email link).";
-    if (c === "auth/unauthorized-continue-uri") return "Tên miền trang này chưa được thêm vào Authentication > Settings > Authorized domains.";
-    if (c === "auth/invalid-email") return "Email chưa đúng.";
-    if (c === "auth/too-many-requests") return "Gửi quá nhiều lần, hãy thử lại sau ít phút.";
-    return "Không gửi được link đăng nhập" + (c ? " (" + c + ")" : "") + ".";
+    if (c === "auth/configuration-not-found") return "Dự án Firebase chưa bật Authentication. Vào Firebase Console > Authentication > Get started, rồi bật nhà cung cấp Google và bấm Save.";
+    if (c === "auth/operation-not-allowed") return "Firebase chưa bật đăng nhập Google (Authentication > Sign-in method > Google > Enable, nhập email hỗ trợ rồi bấm Save).";
+    if (c === "auth/unauthorized-domain") return "Tên miền trang này chưa được thêm vào Authentication > Settings > Authorized domains.";
+    if (c === "auth/popup-blocked") return "Trình duyệt đã chặn cửa sổ đăng nhập. Hãy cho phép cửa sổ bật lên (pop-up) cho trang này rồi thử lại.";
+    if (c === "auth/popup-closed-by-user" || c === "auth/cancelled-popup-request") return "Bạn đã đóng cửa sổ đăng nhập. Bấm lại để thử.";
+    if (c === "auth/network-request-failed") return "Mất kết nối mạng, hãy thử lại.";
+    return "Không đăng nhập được" + (c ? " (" + c + ")" : "") + ".";
   }
   function openAuth() {
     if (!AUTH_ON) return;
@@ -1281,19 +1330,20 @@
     const d = $("auth-dialog");
     if (d.showModal && !d.open) d.showModal();
   }
-  async function sendAuthLink() {
-    const email = $("auth-email").value.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { authMsg("Email chưa đúng định dạng."); return; }
-    const b = $("auth-send"); b.disabled = true; authMsg("Đang gửi…");
+  async function signInGoogle() {
+    const b = $("auth-send"); b.disabled = true; authMsg("Đang mở cửa sổ đăng nhập Google…");
     try {
-      await authApi.am.sendSignInLinkToEmail(authApi.auth, email, { url: location.origin + location.pathname + (room ? "?k=" + room : ""), handleCodeInApp: true });
-      try { localStorage.setItem(SIGNIN_EMAIL_KEY, email); } catch (e) {}
-      authMsg("Đã gửi link. Mở hộp thư (kể cả mục Spam) và bấm link, trang sẽ tự đăng nhập.");
+      const provider = new authApi.am.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" }); // luôn cho chọn đúng tài khoản Gmail
+      await authApi.am.signInWithPopup(authApi.auth, provider);
+      authMsg("");
+      authUser = authApi.auth.currentUser; authIsOwner = await computeOwner(authUser);
+      onAuthChange();
+      if (AUTH_ENFORCED && authIsOwner) { $("auth-dialog").close(); toast("Đã đăng nhập đúng chủ trang. Từ giờ không có email báo cho chính bạn."); }
     } catch (e) { authMsg(authErrorText(e)); }
     b.disabled = false;
   }
-  $("auth-send").addEventListener("click", sendAuthLink);
-  $("auth-email").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendAuthLink(); } });
+  $("auth-send").addEventListener("click", signInGoogle);
   $("auth-close").addEventListener("click", () => $("auth-dialog").close());
   $("auth-close2").addEventListener("click", () => $("auth-dialog").close());
   $("auth-signout").addEventListener("click", () => {
@@ -1303,7 +1353,6 @@
   $("auth-btn").addEventListener("click", openAuth);
 
   function setEditing(on) {
-    if (on && AUTH_ENFORCED && !isOwner()) { openAuth(); return; } // chỉ chủ trang đã đăng nhập mới được sửa
     ui.editing = on;
     try {
       localStorage.setItem(MODE_KEY, on ? "1" : "0");
@@ -1311,7 +1360,9 @@
     } catch (e) {}
     refreshAuthUi();
     render();
-    toast(on ? "Đã bật chế độ chỉnh sửa" : "Đã chuyển sang chế độ xem");
+    toast(!on ? "Đã chuyển sang chế độ xem" :
+      AUTH_ENFORCED && !authIsOwner ? "Đã bật chế độ chỉnh sửa. Bạn chưa đăng nhập đúng tài khoản chủ trang nên chỉnh sửa sẽ được báo qua email cho chủ trang." :
+      "Đã bật chế độ chỉnh sửa");
   }
   $("enter-edit").addEventListener("click", () => setEditing(!ui.editing));
   $("exit-edit").addEventListener("click", () => setEditing(false));
@@ -2066,7 +2117,9 @@
     try {
       const out = buildExport();
       const ops = diffOps(toDocs(out));
+      const note = ops.length && !isOwner() && notifyConfigured() ? summarizeOps(ops) : null; // người không phải chủ trang sửa → báo email
       if (ops.length) await chatApi.commit(ops);
+      if (note) noteEdits(note);
       lastSaved = Date.now();
       if (JSON.stringify(state) === snap) { // không có chỉnh sửa mới trong lúc lưu: bản vừa lưu thành dữ liệu gốc
         BASE = { sections: JSON.parse(JSON.stringify(out.sections)) };

@@ -71,7 +71,7 @@
           "$other": {
             ".validate": false
           },
-          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+          ".write": "$room.length >= 20 && auth != null && auth.token.email === 'OWNER_EMAIL_HERE' && auth.token.email_verified === true"
         },
         "games": {
           "$id": {
@@ -134,7 +134,7 @@
               ".validate": false
             }
           },
-          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+          ".write": "$room.length >= 20 && auth != null && auth.token.email === 'OWNER_EMAIL_HERE' && auth.token.email_verified === true"
         },
         "images": {
           "$id": {
@@ -158,7 +158,7 @@
               ".validate": false
             }
           },
-          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+          ".write": "$room.length >= 20 && auth != null && auth.token.email === 'OWNER_EMAIL_HERE' && auth.token.email_verified === true"
         },
         "versions": {
           "$id": {
@@ -253,7 +253,7 @@
               ".validate": false
             }
           },
-          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+          ".write": "$room.length >= 20 && auth != null && auth.token.email === 'OWNER_EMAIL_HERE' && auth.token.email_verified === true"
         },
         "$other": {
           ".validate": false
