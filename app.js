@@ -530,7 +530,8 @@
           '<button type="button" class="img-btn danger" data-action="img-del" data-game="' + esc(g.id) + '" data-index="' + i + '">Xóa</button></div>' : "") +
         "</div><figcaption>" + (ui.editing ? ed("cap", g.id, String(i), im.caption || "", "span", "", false, "Chú thích ảnh", "Chú thích ảnh") : esc(im.caption || "")) + "</figcaption></figure>").join("") +
       (ui.editing ? '<figure class="add-img"><button type="button" class="add-img-btn" data-action="img-add" data-game="' + esc(g.id) + '">+ Thêm ảnh</button>' +
-        '<button type="button" class="add-img-btn add-vid-btn" data-action="vid-add" data-game="' + esc(g.id) + '">+ Thêm video YouTube</button></figure>' : "") +
+        '<button type="button" class="add-img-btn add-vid-btn" data-action="vid-add" data-game="' + esc(g.id) + '">+ Thêm video YouTube</button>' +
+        '<small class="paste-hint">Hoặc rê chuột vào game rồi nhấn Ctrl+V để dán ảnh hoặc link YouTube</small></figure>' : "") +
       "</div>" +
       '<button class="nav-btn next" data-action="scroll" data-dir="1" aria-label="Ảnh sau">›</button></div>' : "";
 
@@ -1864,33 +1865,74 @@
     if (input == null) return;
     const id = parseYouTube(input);
     if (!id) { toast("Link YouTube chưa đúng. Thử dán lại link trong thanh địa chỉ khi đang xem video."); return; }
+    addVideo(gid, index, id);
+  }
+  // Thêm (index = -1) hoặc thay (index >= 0) một video YouTube trong dải ảnh của game
+  function addVideo(gid, index, id) {
+    const g = findGame(gid);
+    if (!g) return;
+    const arr = imagesOf(g);
+    const old = index >= 0 ? arr[index] : null;
     const item = { src: "yt:" + id, caption: old ? old.caption || "" : "", iid: sanitizeId("yt-" + id + "-" + Date.now().toString(36)) };
     if (old) arr[index] = item; else arr.push(item);
     state.images[gid] = arr;
     save(); render();
     toast(old ? "Đã đổi video." : "Đã thêm video.");
   }
+  // Nhận một hoặc nhiều file ảnh (chọn từ máy hoặc dán), nén rồi thêm vào game (index >= 0: thay ảnh đó bằng file đầu tiên)
+  function addImageFiles(gid, index, files) {
+    Promise.all(files.map((f) => processImage(f, gid))).then((results) => {
+      const g = findGame(gid);
+      if (!g) return;
+      const arr = imagesOf(g);
+      let replaced = false;
+      results.forEach((res, k) => {
+        const old = index >= 0 && k === 0 ? arr[index] : null;
+        // iid gán ngay từ đầu để phiên bản có thể tham chiếu ảnh này
+        const item = { src: res.dataUrl, caption: old ? old.caption || "" : "", pending: res.name, iid: sanitizeId(res.name) };
+        if (old) { arr[index] = item; replaced = true; } else arr.push(item);
+      });
+      state.images[gid] = arr;
+      save(); render();
+      toast(replaced ? "Đã thay ảnh." : results.length > 1 ? "Đã thêm " + results.length + " ảnh." : "Đã thêm ảnh.");
+    }).catch(() => toast("Không đọc được file ảnh này."));
+  }
   function pickImage(gid, index) {
     const inp = document.createElement("input");
     inp.type = "file"; inp.accept = "image/*";
     inp.onchange = () => {
       const f = inp.files && inp.files[0];
-      if (!f) return;
-      processImage(f, gid).then((res) => {
-        const g = findGame(gid);
-        if (!g) return;
-        const arr = imagesOf(g);
-        const old = index >= 0 ? arr[index] : null;
-        // iid gán ngay từ đầu để phiên bản có thể tham chiếu ảnh này
-        const item = { src: res.dataUrl, caption: old ? old.caption || "" : "", pending: res.name, iid: sanitizeId(res.name) };
-        if (old) arr[index] = item; else arr.push(item);
-        state.images[gid] = arr;
-        save(); render();
-        toast(old ? "Đã thay ảnh." : "Đã thêm ảnh.");
-      }).catch(() => toast("Không đọc được file ảnh này."));
+      if (f) addImageFiles(gid, index, [f]);
     };
     inp.click();
   }
+
+  // ---- Dán ảnh (Ctrl+V) khi đang Chỉnh sửa ----
+  // Dán ảnh chụp màn hình hoặc ảnh sao chép từ nơi khác vào game đang rê chuột (không có thì game đang ở đầu màn hình).
+  // Dán link YouTube thì thêm video. Đang gõ trong ô nhập thì để trình duyệt dán chữ như bình thường.
+  document.addEventListener("mouseover", (e) => {
+    const g = e.target.closest && e.target.closest(".game");
+    if (g) ui.hoverGame = g.id.slice(2);
+  }, { passive: true });
+  document.addEventListener("paste", (e) => {
+    if (!ui.editing || !e.clipboardData) return;
+    const t = e.target;
+    if (t && t.closest && t.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']")) return;
+    if (document.querySelector("dialog[open]") || !lb.hidden) return;
+    const cd = e.clipboardData;
+    const files = Array.from(cd.files || []).filter((f) => /^image\//.test(f.type));
+    const text = (cd.getData("text") || "").trim();
+    const yt = !files.length && /youtu\.?be/i.test(text) ? parseYouTube(text) : "";
+    if (!files.length && !yt) return;
+    e.preventDefault();
+    const hovered = ui.hoverGame && findGame(ui.hoverGame) ? ui.hoverGame : "";
+    const gid = hovered || ui.spyGame;
+    if (!gid || !findGame(gid)) { toast("Rê chuột vào game cần thêm rồi nhấn Ctrl+V lại."); return; }
+    const name = (findGame(gid) || {}).name || "";
+    if (yt) { addVideo(gid, -1, yt); return; }
+    toast("Đang xử lý ảnh dán vào " + name + "…");
+    addImageFiles(gid, -1, files);
+  });
 
   // Chuyển game sang mục khác (kéo thả hoặc chọn từ danh sách)
   function moveGame(gid, key) {

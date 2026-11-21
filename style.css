@@ -527,6 +527,7 @@ body.dragging .drop-hint { display: block; }
 .img-btn.danger:hover { background: var(--danger); color: #fff; }
 .gallery figure.add-img { display: grid; gap: 8px; align-content: center; flex-basis: min(60%, 260px); }
 /* Video YouTube trong dải ảnh: ảnh bìa + nút phát, bấm thì thay bằng khung phát */
+.paste-hint { color: var(--muted); font-size: .74rem; line-height: 1.35; text-align: center; }
 .yt-thumb { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .gallery .yt-thumb img { cursor: pointer; }
 .yt-play { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }

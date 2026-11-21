@@ -68,6 +68,7 @@ trình duyệt này.
   - **Chữ**: bấm vào tên game, thể loại, nền tảng, ghi chú, mô tả, từng việc, chú thích ảnh (ô viền nét đứt)
     và gõ. Rời ô là tự lưu. Enter để xong (riêng mô tả, Enter xuống dòng).
   - **Ảnh**: **Thay ảnh** / **Xóa** trên mỗi ảnh, **+ Thêm ảnh** ở cuối dải ảnh. Ảnh tự thu nhỏ (tối đa 1280px)
+  - **Dán ảnh (Ctrl+V)**: khi đang Chỉnh sửa, chụp màn hình hoặc sao chép ảnh rồi rê chuột vào game cần thêm và nhấn **Ctrl+V** (có thể dán nhiều ảnh cùng lúc). Dán link YouTube cũng thêm video. Không rê chuột vào game nào thì ảnh vào game đang ở đầu màn hình. Đang gõ trong ô chữ thì Ctrl+V dán chữ như bình thường.
   - **Video YouTube**: nút **+ Thêm video YouTube** cạnh **+ Thêm ảnh**, dán link (watch, youtu.be, shorts đều được). Video hiện cùng dải ảnh với ảnh bìa và nút phát, bấm là phát ngay trong trang. Nên để video ở chế độ **Không công khai** trên YouTube. Trang chỉ lưu mã video (không lưu file), nên không tốn dung lượng. Mục video có nút **Đổi link** và **Xóa**, và nhận xét được như ảnh.
     và nén cho tới khi đủ nhẹ.
   - **Tài liệu tham khảo**: sửa tên và địa chỉ, **+ Thêm tài liệu**, ✕ để xóa.
