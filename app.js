@@ -600,8 +600,9 @@
   function updateSpy() {
     spyQueued = false;
     let current = "";
+    const edge = ($("topbar").offsetHeight || 0) + 24; // mục nào đã trượt qua dưới header thì coi là đang xem
     document.querySelectorAll(".section").forEach((s) => {
-      if (s.getBoundingClientRect().top <= 140) current = s.getAttribute("data-key");
+      if (s.getBoundingClientRect().top <= edge) current = s.getAttribute("data-key");
     });
     document.querySelectorAll(".tabs a").forEach((a) => {
       const on = a.getAttribute("data-key") === current;
@@ -959,6 +960,16 @@
     }
   }
 
+  let ownerNoticeShown = false;
+  // Nút "Gửi email thử" (khi đang Chỉnh sửa): kiểm tra đường gửi email mà không cần nhắn tin giả
+  $("test-mail").addEventListener("click", () => {
+    if (!notifyConfigured()) { toast("Chưa cấu hình email thông báo (mục notify trong data.js)."); return; }
+    toast("Đang gửi email thử…");
+    postNotify("Thử gửi email từ " + DATA.title, "Đây là email thử do bạn bấm nút “Gửi email thử” trên trang.\nTrang: " + pageUrl() + "\n", "Chủ trang")
+      .then(() => toast("Web3Forms đã nhận thư thử. Hãy kiểm tra hộp thư của bạn (cả mục Spam, Quảng cáo) trong vài phút."))
+      .catch((e) => toast("Không gửi được email thử: " + (e && e.message ? e.message : "lỗi mạng")));
+  });
+
   function addComment(g, author, text, target, draftKey) {
     ui.name = author;
     try { localStorage.setItem(NAME_KEY, author); } catch (err) {}
@@ -969,11 +980,19 @@
       ui.drafts[draftKey] = "";
       render();
       chatApi.add(m).then(() => {
-        if (!ui.editing && !isOwner() && notifyConfigured()) { // người xem nhắn → báo email cho chủ trang
-          const c = { author: author, text: text, time: new Date(m.ts).toISOString() };
-          if (target) c.target = target;
-          postNotify(subjectFor(g, c), buildFeedback([{ g: g, c: c }]), author).catch(() => {});
+        if (!notifyConfigured()) return;
+        if (ui.editing || isOwner()) { // chủ trang tự nhắn thì không báo email cho chính mình, nhưng nói rõ để khỏi nhầm là lỗi
+          if (!ownerNoticeShown) {
+            ownerNoticeShown = true;
+            toast("Đã gửi. Trình duyệt này là của chủ trang nên không gửi email báo. Thử email bằng nút “Gửi email thử” hoặc dùng cửa sổ ẩn danh.");
+          }
+          return;
         }
+        // người xem nhắn → báo email cho chủ trang; nếu lỗi thì nói rõ, không im lặng
+        const c = { author: author, text: text, time: new Date(m.ts).toISOString() };
+        if (target) c.target = target;
+        postNotify(subjectFor(g, c), buildFeedback([{ g: g, c: c }]), author)
+          .catch((e) => toast("Tin đã gửi, nhưng chưa gửi được email báo cho chủ trang (" + (e && e.message ? e.message : "lỗi mạng") + ")."));
       }).catch(() => toast("Không gửi được tin nhắn. Kiểm tra mạng rồi thử lại."));
       return;
     }

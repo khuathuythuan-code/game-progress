@@ -37,7 +37,8 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+html { scroll-behavior: smooth; scroll-padding-top: 140px; } /* chừa chỗ cho thanh header dính (2 hàng) */
+@media (max-width: 640px) { html { scroll-padding-top: 120px; } }
 body {
   margin: 0;
   background: var(--bg);
@@ -89,9 +90,10 @@ main:focus { outline: none; }
 /* ---------- Điều hướng ---------- */
 .topbar {
   position: sticky; top: 0; z-index: 20;
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-direction: column; gap: 8px;
   padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border);
 }
+.topbar-row { display: flex; align-items: center; gap: 8px; }
 .top-edit { flex: none; padding: 6px 14px; white-space: nowrap; }
 .top-edit.on { background: var(--accent); color: var(--accent-ink); }
 .tabs {
@@ -297,7 +299,7 @@ h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
 .gate h2 { margin: 0 0 8px; font-size: 1.3rem; }
 .gate p { margin: 0; color: var(--muted); }
 .gate code { background: var(--bg); padding: 0 6px; border-radius: 4px; }
-body.gated .top-edit, body.gated .filterwrap, body.gated .to-top { display: none !important; }
+body.gated .top-edit, body.gated .filterbar, body.gated .to-top { display: none !important; }
 body.editing { padding-bottom: 110px; }
 body.editing .send-pill, body.editing .to-top { bottom: 120px; }
 body.editing .toast { bottom: 130px; }
@@ -312,13 +314,20 @@ body.editing .toast { bottom: 130px; }
 .to-top:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
 /* ---------- Bộ lọc ---------- */
-.filterwrap { margin-top: 18px; }
-.filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+/* Thanh lọc nằm trong header dính, hàng thứ hai */
+.filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; width: 100%; max-width: 980px; margin: 0 auto; }
 .filterbar input[type="search"], .filterbar select {
-  min-height: 40px; padding: 8px 12px; font: inherit; font-size: .92rem; color: var(--text);
+  min-height: 38px; padding: 6px 12px; font: inherit; font-size: .9rem; color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
 }
-.filterbar input[type="search"] { flex: 1 1 240px; min-width: 0; }
+.filterbar input[type="search"] { flex: 1 1 200px; min-width: 0; }
+@media (max-width: 640px) { /* điện thoại: một hàng cuộn ngang để header không chiếm nhiều chỗ */
+  .filterbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .filterbar::-webkit-scrollbar { display: none; }
+  .filterbar > * { flex: none; }
+  .filterbar input[type="search"] { flex: 0 0 150px; }
+  .f-count { display: none; }
+}
 .filterbar input:focus, .filterbar select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
 .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 .seg-btn { padding: 5px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; }

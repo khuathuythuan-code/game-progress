@@ -70,7 +70,8 @@ trình duyệt này.
     ô bên phải (dùng cho điện thoại). Sang "Hoàn thành" thì tiến độ thành 100%, sang "Dự kiến" thì về 0%.
   - Mọi thao tác xóa/chuyển có nút **Hoàn tác** trong 7 giây.
 - **Xem**: mặc định gọn, không có nút sửa/xóa. Sếp thấy thay đổi của bạn ngay, không cần tải lại trang.
-- **Lọc game**: ô tìm kiếm (gõ không dấu vẫn tìm được), lọc theo mục và theo thể loại.
+- **Lọc game**: nằm ngay trên **thanh header dính** ở đầu trang (hàng dưới, cuộn trang vẫn thấy): ô tìm kiếm
+  (gõ không dấu vẫn tìm được), lọc theo mục và theo thể loại. Hàng trên là điều hướng mục và nút **Chỉnh sửa**.
 - **Nhận xét và chat**: rê chuột vào bất kỳ phần nào (ảnh, tiến độ, mô tả, từng việc, từng link) rồi bấm
   **Nhận xét**. Trên điện thoại, bấm nút **Nhận xét** ở thanh trên rồi chạm vào phần cần nhận xét.
   Tin nhắn hiện tức thì cho cả hai bên, mỗi game có khung **Trao đổi** ở cuối.
@@ -88,7 +89,13 @@ trình duyệt này.
     hiện đủ ảnh. Sao lưu và nhập lại cũng gồm phiên bản.
   - Phiên bản cần kết nối cơ sở dữ liệu mới tạo được.
 - **Email báo cho bạn**: khi sếp nhắn, email báo về cho bạn (qua Web3Forms, cấu hình ở `notify` trong
-  `data.js`). Tin bạn nhắn không gửi email. Chưa có email nào gửi cho sếp.
+  `data.js`). Chưa có email nào gửi cho sếp.
+  - **Trình duyệt đã bấm Chỉnh sửa một lần được coi là của chủ trang** và không bao giờ gửi email cho chính bạn
+    (trang sẽ báo một lần để bạn biết). Vì vậy muốn thử email thật bằng nhận xét, hãy nhắn từ **điện thoại hoặc
+    cửa sổ ẩn danh** mở link có mã, chưa từng bấm Chỉnh sửa.
+  - Nút **Gửi email thử** (thanh dưới khi đang Chỉnh sửa) gửi một thư thử để kiểm tra Web3Forms, dùng được ngay
+    trên máy của bạn. Nếu gửi lỗi, trang báo rõ lý do. Nếu báo thành công mà không thấy thư, hãy tìm trong Spam,
+    Quảng cáo, Tất cả thư, tìm chữ "web3forms".
 - **Sao lưu**: nút **Tải bản sao lưu** (file JSON kèm ảnh) và **Nhập bản sao lưu** ở thanh dưới khi đang
   chỉnh sửa. **Nhập sẽ thay toàn bộ nội dung hiện tại.** Không có lịch sử git cho nội dung, nên hãy
   tải bản sao lưu định kỳ.

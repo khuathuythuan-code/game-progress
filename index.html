@@ -24,11 +24,10 @@
   </header>
 
   <div class="topbar" id="topbar">
-    <nav class="tabs" id="tabs" aria-label="Điều hướng mục"></nav>
-    <button class="btn ghost top-edit" id="enter-edit" type="button" aria-pressed="false">Chỉnh sửa</button>
-  </div>
-
-  <div class="wrap filterwrap">
+    <div class="topbar-row">
+      <nav class="tabs" id="tabs" aria-label="Điều hướng mục"></nav>
+      <button class="btn ghost top-edit" id="enter-edit" type="button" aria-pressed="false">Chỉnh sửa</button>
+    </div>
     <div class="filterbar" id="filterbar" role="search" aria-label="Lọc game">
       <input id="f-q" type="search" placeholder="Tìm game theo tên, thể loại, nền tảng…" aria-label="Tìm game" autocomplete="off">
       <div class="seg" id="f-sec" role="group" aria-label="Lọc theo mục"></div>
@@ -53,6 +52,7 @@
     <p><strong>Đang chỉnh sửa.</strong> Sửa chữ, ảnh, link ngay trên trang, kéo game sang mục khác bằng nút ⠿. Thay đổi <strong>tự lưu</strong> và mọi người thấy ngay.
       <span class="dirty" id="dirty" role="status" aria-live="polite" hidden></span></p>
     <div class="editbar-actions">
+      <button class="btn ghost" id="test-mail" type="button">Gửi email thử</button>
       <button class="btn ghost" id="export" type="button">Tải bản sao lưu</button>
       <button class="btn ghost" id="import" type="button">Nhập bản sao lưu</button>
       <button class="btn" id="exit-edit" type="button">Xong</button>
