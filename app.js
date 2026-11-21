@@ -107,7 +107,8 @@
     filter: { q: "", sec: "all", genre: "" }, dragging: "",
     viewVersion: {},   // game id → id phiên bản cũ đang xem (không có = xem bản mới nhất)
     showResolved: {},  // khóa → có đang hiện các nhận xét đã giải quyết không
-    chatGame: "auto",  // khung Trao đổi bên phải: "auto" = theo game đang xem, hoặc id game được chọn
+    chatGame: "all",   // khung Trao đổi bên phải: "all" = tất cả nhận xét (mặc định), "auto" = theo phần đang xem, "_site", hoặc id game
+    allTo: "",         // ô "Viết về" ở mục Tất cả nhận xét (rỗng = theo game đang xem)
     spyGame: "",       // game đang nằm ở đầu màn hình (do updateSpy tính)
     lCollapsed: false, // thanh bên trái đang thu gọn (chỉ có tác dụng trên máy tính)
     rCollapsed: false  // thanh bên phải đang thu gọn (chỉ có tác dụng trên máy tính)
@@ -204,13 +205,8 @@
     tagSite($("f-sec"), "f-sec", "Nút lọc theo mục", cm);
     tagSite($("f-genre"), "f-genre", "Ô lọc theo thể loại", cm);
     document.querySelectorAll(".section-head").forEach((el) => { const s = el.closest(".section"); if (s) tagSite(el, "sec-" + s.getAttribute("data-key"), "Tiêu đề mục: " + txt(el, "h2"), cm); });
-    tagSite($("side-title"), "sidetitle", "Tên trang trên thanh bên", cm);
-    document.querySelectorAll(".nav-sec-link").forEach((el) => tagSite(el, "nav-" + el.getAttribute("data-key"), "Thanh bên, mục: " + txt(el).replace(/\d+(\/\d+)?$/, ""), cm));
-    document.querySelectorAll(".nav-game").forEach((el) => tagSite(el, "nav-g-" + el.getAttribute("data-game"), "Thanh bên, game: " + txt(el), cm));
-    tagSite($("toggle-all"), "toggleall", "Nút Thu gọn / Mở rộng tất cả", cm);
-    tagSite($("enter-edit"), "editbtn", "Nút Chỉnh sửa", cm);
+    // Hai thanh bên (trái: điều hướng, phải: Trao đổi) KHÔNG nhận xét được; chỉ nút Trao đổi trên header thì có.
     tagSite($("chat-btn"), "chatbtn", "Nút Trao đổi", cm);
-    tagSite($("rs-game"), "rsgame", "Ô chọn game trong khung Trao đổi", cm);
   }
   function findTask(id) {
     for (const sec of DATA.sections) for (const g of sec.games) {
@@ -253,14 +249,15 @@
       '<button class="icon-btn" data-action="del-task" data-id="' + esc(t.id) + '" title="Xóa việc này" aria-label="Xóa việc: ' + esc(t.text) + '">✕</button></li>';
   }
 
-  function renderMsg(g, c, withTag) {
-    // Người viết, hoặc chủ trang khi đang chỉnh sửa, được xóa hoặc đánh dấu "đã giải quyết" (ẩn đi)
-    const canAct = c.mine || ui.editing;
+  function renderMsg(g, c, withTag, withGame) {
+    // Người viết, hoặc chủ trang (trình duyệt đã từng bấm Chỉnh sửa), được xóa hoặc đánh dấu "đã giải quyết" (ẩn đi)
+    const canAct = c.mine || ui.editing || isOwner();
     const canResolve = canAct && (c.remote || c.mine);
     return '<li class="msg' + (c.mine ? " mine" : "") + (c.resolved ? " resolved" : "") + '"><div class="msg-meta"><b>' + esc(c.author) + "</b><time>" + esc(fmtTime(c.time)) + "</time>" +
       (c.resolved ? '<span class="badge ok">✓ Đã giải quyết</span>' : "") +
       (canResolve ? '<button class="link-btn" data-action="resolve-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" data-to="' + (c.resolved ? "0" : "1") + '">' + (c.resolved ? "Mở lại" : "Đã giải quyết") + "</button>" : "") +
       (canAct ? '<button class="link-btn" data-action="del-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" aria-label="Xóa nhận xét của ' + esc(c.author) + '">Xóa</button>' : "") + "</div>" +
+      (withGame ? '<a class="ctag gtag" href="' + (g.id === SITE_ID ? "#" : "#g-" + esc(g.id)) + '" data-action="goto-game" data-id="' + esc(g.id) + '">' + esc(g.name) + "</a>" : "") +
       (withTag && c.target ? '<a class="ctag" href="#' + esc(c.target.id) + '" data-action="goto-target" data-id="' + esc(c.target.id) + '">về: ' + esc(c.target.label) + "</a>" : "") +
       '<p class="bubble">' + esc(c.text) + "</p></li>";
   }
@@ -302,6 +299,41 @@
       '<textarea id="ct-' + esc(g.id) + '" name="text" rows="2" maxlength="600" placeholder="Nhận xét chung về ' + esc(g.name) + '" data-draft="' + esc(g.id) + '" data-fk="ct-' + esc(g.id) + '" required>' + esc(draft) + "</textarea>" +
       '<div class="composer-foot"><span class="hint kbd">Ctrl + Enter để gửi</span><button class="btn small" type="submit">' + (chatOn ? "Gửi" : "Thêm nhận xét") + "</button></div>" +
       "</form></section>");
+  }
+
+  // ---------- Mục "Tất cả nhận xét" của khung Trao đổi ----------
+  // Gom nhận xét của mọi game và của "Toàn trang", theo thời gian. Mỗi tin có nhãn game để biết là về đâu.
+  function allItems() {
+    const items = [];
+    [SITE_GAME].concat(DATA.sections.reduce((a, s) => a.concat(visibleGames(s)), [])).forEach((g) => allComments(g).forEach((c) => items.push({ g: g, c: c })));
+    return items.sort((a, b) => new Date(a.c.time) - new Date(b.c.time));
+  }
+  function allThreadHtml() {
+    const items = allItems();
+    const open = items.filter((x) => !x.c.resolved), done = items.filter((x) => x.c.resolved);
+    const shown = !!ui.showResolved.all;
+    const li = (x) => renderMsg(x.g, x.c, true, true);
+    return "<h4>" + (chatOn ? "Trao đổi" : "Nhận xét") + (open.length ? " (" + open.length + ")" : "") + "</h4>" +
+      (!items.length ? '<p class="no-comments">Chưa có nhận xét nào. Rê chuột vào một phần bất kỳ của trang rồi bấm "Nhận xét", hoặc viết ở dưới.</p>' :
+        (!open.length ? '<p class="no-comments">Mọi nhận xét đã được giải quyết.</p>' : "") +
+        (open.length ? '<ul class="thread">' + open.map(li).join("") + "</ul>" : "") +
+        (done.length ? '<button type="button" class="link-btn show-resolved" data-action="toggle-resolved" data-key="all" aria-expanded="' + shown + '">' +
+          (shown ? "Ẩn " : "Hiện ") + done.length + " nhận xét đã giải quyết</button>" : "") +
+        (done.length && shown ? '<ul class="thread resolved-list">' + done.map(li).join("") + "</ul>" : ""));
+  }
+  function renderAllComments() {
+    const games = DATA.sections.reduce((a, s) => a.concat(visibleGames(s)), []);
+    const to = ui.allTo && (ui.allTo === SITE_ID || games.some((g) => g.id === ui.allTo)) ? ui.allTo : (games.some((g) => g.id === ui.spyGame) ? ui.spyGame : SITE_ID);
+    return '<section class="comments" id="c-all" aria-label="Tất cả nhận xét"><div class="thread-wrap">' + allThreadHtml() + "</div>" +
+      '<form class="composer" data-game="">' +
+      '<label class="sr-only" for="to-all">Viết về</label>' +
+      '<select id="to-all" name="gid" class="to-select" data-fk="to-all"><option value="' + SITE_ID + '"' + (to === SITE_ID ? " selected" : "") + ">Viết về: Toàn trang</option>" +
+      games.map((g) => '<option value="' + esc(g.id) + '"' + (g.id === to ? " selected" : "") + ">Viết về: " + esc(g.name) + "</option>").join("") + "</select>" +
+      '<label class="sr-only" for="cn-all">Tên của bạn</label>' +
+      '<input id="cn-all" name="author" type="text" maxlength="40" placeholder="Tên của bạn" autocomplete="name" data-fk="cn-all" value="' + esc(ui.name) + '" required>' +
+      '<label class="sr-only" for="ct-all">Nội dung nhận xét</label>' +
+      '<textarea id="ct-all" name="text" rows="2" maxlength="600" placeholder="Viết nhận xét chung" data-draft="all" data-fk="ct-all" required>' + esc(ui.drafts.all || "") + "</textarea>" +
+      '<div class="composer-foot"><span class="hint kbd">Ctrl + Enter để gửi</span><button class="btn small" type="submit">' + (chatOn ? "Gửi" : "Thêm nhận xét") + "</button></div></form></section>";
   }
 
   // ---------- Phiên bản của từng game ----------
@@ -668,7 +700,8 @@
     });
     if (currentGame !== ui.spyGame) { // đổi game đang xem thì khung Trao đổi (chế độ tự động) đổi theo, trừ khi đang gõ dở
       ui.spyGame = currentGame;
-      if (ui.chatGame === "auto" && !isTyping()) renderRSide();
+      // "auto" đổi theo game đang xem; mục Tất cả thì chỉ đổi ô "Viết về" mặc định (khi bạn chưa tự chọn)
+      if ((ui.chatGame === "auto" || (ui.chatGame === "all" && !ui.allTo)) && !isTyping()) renderRSide();
     }
     let activeEl = null;
     document.querySelectorAll(".nav-game").forEach((a) => {
@@ -767,7 +800,7 @@
   function deleteComment(gid, id) {
     if (chatOn) {
       const m = remote.find((x) => x.id === id);
-      if (m && chatApi && (m.cid === myCid || ui.editing)) {
+      if (m && chatApi && (m.cid === myCid || ui.editing || isOwner())) { // người viết hoặc chủ trang
         const backup = Object.assign({}, m);
         chatApi.remove(id).then(() => {
           toast("Đã xóa tin nhắn", () => { chatApi.restore(backup).catch(() => toast("Không khôi phục được tin nhắn")); });
@@ -781,7 +814,7 @@
       const removed = mineList.splice(idx, 1)[0];
       save(); render();
       toast("Đã xóa nhận xét", () => { (state.comments[gid] = state.comments[gid] || []).push(removed); save(); render(); });
-    } else if (ui.editing) {
+    } else if (ui.editing || isOwner()) {
       state.delComments.push(id); save(); render();
       toast("Đã xóa nhận xét", () => { state.delComments = state.delComments.filter((x) => x !== id); save(); render(); });
     }
@@ -792,9 +825,15 @@
   const popEl = $("annot-pop");
   let hoverEl = null, hideT = null;
 
+  // Chiều cao phần header đang che nội dung: chỉ tính khi header đã dính ở đầu màn hình. Ở đầu trang header còn nằm
+  // dưới phần tiêu đề nên chưa che gì (nếu tính nhầm thì nút Nhận xét ở tiêu đề trang bị ẩn).
+  function stuckHeaderH() {
+    const r = $("topbar").getBoundingClientRect();
+    return r.top <= 1 ? Math.round(r.bottom) : 0;
+  }
   function placeChip(el) {
     const r = el.getBoundingClientRect();
-    const navH = $("topbar").offsetHeight || 0;
+    const navH = stuckHeaderH();
     if (r.bottom < navH + 24 || r.top > innerHeight - 24) { chip.hidden = true; return; }
     chip.hidden = false;
     const cw = chip.offsetWidth, ch = chip.offsetHeight;
@@ -892,7 +931,7 @@
     // ưu tiên đặt bong bóng bên dưới, rồi bên trên, rồi bên cạnh để không che phần đang được nhận xét
     const w = Math.min(360, innerWidth - 16);
     popEl.style.width = w + "px";
-    const navH = $("topbar").offsetHeight || 0;
+    const navH = stuckHeaderH();
     const h = popEl.offsetHeight, gap = 10;
     const clampL = (x) => Math.max(8, Math.min(x, innerWidth - w - 8));
     const sideTop = () => Math.max(navH + 8, Math.min(rect.top, innerHeight - h - 8));
@@ -1172,24 +1211,32 @@
     if (!ui.annotating) return;
     // Ở chế độ chọn để nhận xét, chạm vào phần nào cũng chọn phần đó. Chỉ chừa những nút cần để thoát chế độ
     // hoặc mở menu, và các hộp thoại đang mở.
-    if (e.target.closest("#annot-pop, #editbar, #send, #toast, #lightbox, #menu-btn, #nav-close, #nav-backdrop, #rs-collapse, [data-action='annot-mode']")) return;
+    if (e.target.closest("#annot-pop, #editbar, #send, #toast, #lightbox, #menu-btn, #nav-close, #nav-backdrop, #rs-collapse, #rs-edge, [data-action='annot-mode']")) return;
     const a = e.target.closest("[data-annot]");
     if (a) { e.preventDefault(); e.stopImmediatePropagation(); openPop(a); }
   }, true);
+
+  function jumpToGame(id) { // nhảy tới thẻ của một game (hoặc về đầu trang nếu là "Toàn trang")
+    if (id === SITE_ID) { window.scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" }); return; }
+    setCollapsed(id, false);
+    const card = $("g-" + id);
+    if (card) {
+      card.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+      card.querySelector("h3").focus({ preventScroll: true });
+      history.replaceState(null, "", "#g-" + id);
+    }
+  }
+  // Chọn "Viết về" ở mục Tất cả nhận xét thì nhớ lựa chọn (không còn tự theo game đang xem)
+  document.addEventListener("change", (e) => {
+    if (e.target.matches && e.target.matches('.composer select[name="gid"]')) ui.allTo = e.target.value;
+  });
 
   // ---------- Sự kiện chung ----------
   document.addEventListener("click", (e) => {
     const chipLink = e.target.closest(".chip[data-game], .nav-game[data-game]"); // ô trên bảng đầu trang hoặc game trong thanh bên
     if (chipLink) {
       e.preventDefault();
-      const id = chipLink.getAttribute("data-game");
-      setCollapsed(id, false);
-      const card = $("g-" + id);
-      if (card) {
-        card.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
-        card.querySelector("h3").focus({ preventScroll: true });
-        history.replaceState(null, "", "#g-" + id);
-      }
+      jumpToGame(chipLink.getAttribute("data-game"));
       return;
     }
     const el = e.target.closest("[data-action]");
@@ -1223,6 +1270,9 @@
     } else if (act === "goto-comments") {
       e.preventDefault();
       openChat(id); // mở khung Trao đổi bên phải đúng game này
+    } else if (act === "goto-game") {
+      e.preventDefault();
+      jumpToGame(id);
     } else if (act === "goto-target") {
       e.preventDefault();
       history.replaceState(null, "", "#" + id);
@@ -1282,14 +1332,15 @@
       if (again) again.focus();
     } else if (composer) {
       e.preventDefault();
-      const gid = composer.getAttribute("data-game");
+      const isAll = !!composer.elements.gid; // ô soạn trong mục "Tất cả nhận xét": chọn game cần viết về
+      const gid = isAll ? composer.elements.gid.value : composer.getAttribute("data-game");
       const g = findGame(gid);
       const author = composer.elements.author.value.trim();
       const text = composer.elements.text.value.trim();
       if (!g || !author || !text) return;
       const tid = composer.getAttribute("data-target");
       const target = tid ? { id: tid, label: composer.getAttribute("data-tlabel") } : null;
-      addComment(g, author, text, target, tid ? "pop:" + tid : gid);
+      addComment(g, author, text, target, tid ? "pop:" + tid : (isAll ? "all" : gid));
     }
   });
 
@@ -2027,8 +2078,11 @@
       if (g && w) w.innerHTML = threadHtml(g);
     });
     // khung Trao đổi bên phải: chỉ làm mới danh sách tin, giữ nguyên ô đang gõ
-    const rg = findGame($("rs-body").getAttribute("data-game")), rw = $("rs-body").querySelector(".thread-wrap");
-    if (rg && rw) rw.innerHTML = threadHtml(rg);
+    const rbg = $("rs-body").getAttribute("data-game"), rw = $("rs-body").querySelector(".thread-wrap");
+    if (rw) {
+      if (rbg === "all") rw.innerHTML = allThreadHtml();
+      else { const rg = findGame(rbg); if (rg) rw.innerHTML = threadHtml(rg); }
+    }
     if (ui.pop) {
       const g = findGame(ui.pop.gid);
       const w = popEl.querySelector(".pop-thread-wrap");
@@ -2085,13 +2139,18 @@
     const sel = $("rs-game");
     const key = games.map((g) => g.id + "|" + g.name).join("§");
     if (sel.getAttribute("data-key") !== key) { // chỉ dựng lại danh sách khi có đổi, để không mất focus của ô chọn
-      sel.innerHTML = '<option value="auto">Theo phần đang xem</option><option value="' + SITE_ID + '">Toàn trang (menu, tiêu đề, bảng tổng quan…)</option>' +
+      sel.innerHTML = '<option value="all">Tất cả nhận xét</option><option value="auto">Theo phần đang xem</option><option value="' + SITE_ID + '">Toàn trang (tiêu đề, bảng tổng quan, thanh lọc…)</option>' +
         games.map((g) => '<option value="' + esc(g.id) + '">' + esc(g.name) + "</option>").join("");
       sel.setAttribute("data-key", key);
     }
-    sel.value = (ui.chatGame === "auto" || ui.chatGame === SITE_ID || games.some((g) => g.id === ui.chatGame)) ? ui.chatGame : "auto";
-    const g = chatTarget();
+    sel.value = (ui.chatGame === "all" || ui.chatGame === "auto" || ui.chatGame === SITE_ID || games.some((g) => g.id === ui.chatGame)) ? ui.chatGame : "all";
     const body = $("rs-body");
+    if (ui.chatGame === "all" || sel.value === "all") { // mục mặc định: tất cả nhận xét của cả trang
+      body.setAttribute("data-game", "all");
+      body.innerHTML = '<h3 class="rs-game">Tất cả nhận xét</h3>' + renderAllComments();
+      return;
+    }
+    const g = chatTarget();
     body.setAttribute("data-game", g.id);
     body.innerHTML = '<h3 class="rs-game">' + esc(g.name) + "</h3>" + renderComments(g);
   }
@@ -2121,6 +2180,10 @@
     $("nav-collapse").setAttribute("aria-expanded", String(!ui.lCollapsed));
     $("menu-btn").setAttribute("aria-expanded", String(navOpen()));
     $("chat-btn").setAttribute("aria-expanded", String(mobile ? rsOpenMobile() : !ui.rCollapsed));
+    const edge = $("rs-edge"), rOpen = !ui.rCollapsed;
+    edge.setAttribute("aria-expanded", String(rOpen));
+    const lbl = rOpen ? "Thu gọn khung trao đổi" : "Mở khung trao đổi";
+    edge.title = lbl; edge.setAttribute("aria-label", lbl);
     $("nav-backdrop").hidden = !(mobile && (navOpen() || rsOpenMobile()));
   }
   function setLeft(collapsed) { ui.lCollapsed = collapsed; store("lcollapsed", collapsed ? "1" : "0"); applyPanels(); }
@@ -2152,6 +2215,7 @@
   $("nav-reopen").addEventListener("click", () => setLeft(false));
   $("chat-btn").addEventListener("click", () => setRight(narrow.matches ? !rsOpenMobile() : ui.rCollapsed, false));
   $("rs-collapse").addEventListener("click", () => setRight(false, true));
+  $("rs-edge").addEventListener("click", () => setRight(ui.rCollapsed, false));
   $("nav-backdrop").addEventListener("click", () => { setNav(false, true); setRight(false, false); });
   $("sidebar").addEventListener("click", (e) => { if (narrow.matches && e.target.closest("a")) setNav(false, false); }); // chọn mục thì đóng menu
   document.addEventListener("keydown", (e) => {
@@ -2160,6 +2224,32 @@
   });
   narrow.addEventListener("change", () => { document.body.classList.remove("nav-open", "rs-open"); applyPanels(); });
   applyPanels();
+  // Giao diện sáng/tối: Tự động (theo hệ thống) → Sáng → Tối, nhớ theo từng trình duyệt
+  const THEMES = {
+    auto: { lbl: "Tự động", title: "Tự động (theo hệ thống)", ico: '<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg>' },
+    light: { lbl: "Sáng", title: "Sáng", ico: '<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3 7 7M17 17l1.7 1.7M5.3 18.7 7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>' },
+    dark: { lbl: "Tối", title: "Tối", ico: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>' }
+  };
+  function currentTheme() { const t = stored("theme"); return t === "light" || t === "dark" ? t : "auto"; }
+  function applyTheme(t) {
+    const root = document.documentElement;
+    if (t === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", t);
+    const m = THEMES[t], b = $("theme-btn");
+    $("theme-ico").innerHTML = m.ico; $("theme-lbl").textContent = m.lbl;
+    b.title = "Giao diện: " + m.title; b.setAttribute("aria-label", "Giao diện: " + m.title + ". Bấm để đổi");
+    const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    const mc = document.querySelector('meta[name="theme-color"]'); if (mc) mc.setAttribute("content", dark ? "#0a0d14" : "#161a26");
+  }
+  $("theme-btn").addEventListener("click", () => {
+    const next = { auto: "light", light: "dark", dark: "auto" }[currentTheme()];
+    store("theme", next); applyTheme(next); toast("Giao diện: " + THEMES[next].title);
+  });
+  if (matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => applyTheme(currentTheme()));
+  applyTheme(currentTheme());
+  // Cập nhật --header-h theo chiều cao thật của header dính để chỗ đáp khi cuộn tới một mục không bị header che
+  const syncHeaderH = () => document.documentElement.style.setProperty("--header-h", ($("topbar").offsetHeight || 60) + "px");
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(syncHeaderH).observe($("topbar"));
+  syncHeaderH();
 
   render();
   handleHash(true);

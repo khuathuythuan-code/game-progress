@@ -18,8 +18,11 @@
   --planned-lt: #a5b4fc;
   --font: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+:root { color-scheme: light; }
+/* Chế độ tối: tự theo hệ thống (trừ khi người xem chọn Sáng) hoặc do người xem chọn Tối bằng nút trên header */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #0e111a;
     --surface: #161a26;
     --text: #e7eaf2;
@@ -34,10 +37,26 @@
     --hero-bg: #0a0d14;
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e111a;
+  --surface: #161a26;
+  --text: #e7eaf2;
+  --muted: #9aa3b8;
+  --border: #262c3d;
+  --accent: #a5b4fc;
+  --accent-ink: #0e111a;
+  --done: #34d399;
+  --dev: #fb923c;
+  --planned: #a5b4fc;
+  --danger: #f87171;
+  --hero-bg: #0a0d14;
+}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { scroll-behavior: smooth; scroll-padding-top: 84px; } /* chừa chỗ cho thanh header dính */
+/* Chừa chỗ cho thanh header dính. --header-h do JS cập nhật theo chiều cao thật (header có thể xuống hai hàng) */
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h, 60px) + 24px); }
 body {
   margin: 0;
   background: var(--bg);
@@ -111,6 +130,19 @@ body.side-collapsed .sidebar { transform: translateX(-100%); visibility: hidden;
   transition: transform .2s ease;
 }
 body.rside-collapsed .rside { transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s; }
+/* Tay nắm nổi nằm đúng mép giữa trang và khung phải; khi khung thu gọn thì dính vào mép phải màn hình */
+.rs-edge {
+  display: none; position: fixed; right: var(--rw); top: 50%; z-index: 31; width: 24px; height: 60px;
+  transform: translate(50%, -50%); place-items: center; padding: 0;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .18); cursor: pointer;
+  transition: right .2s ease, transform .2s ease, background .15s, color .15s;
+}
+.rs-edge:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.rs-edge svg { transition: transform .2s ease; }
+body.rside-collapsed .rs-edge { transform: translate(0, -50%); border-right: 0; border-radius: 12px 0 0 12px; }
+body.rside-collapsed .rs-edge svg { transform: rotate(180deg); }
+@media (min-width: 900px) { .rs-edge { display: grid; } .rs-collapse { display: none; } }
 .rs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 18px 16px 8px; }
 .rs-title { font-weight: 800; font-size: 1.05rem; }
 .rs-pick { padding: 0 16px 10px; border-bottom: 1px solid var(--border); }
@@ -127,6 +159,10 @@ body.rside-collapsed .rside { transform: translateX(100%); visibility: hidden; t
   font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer;
 }
 .chat-btn:hover { border-color: var(--accent); }
+.theme-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 38px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.theme-btn:hover { border-color: var(--accent); }
+.theme-btn svg { flex: none; }
+@media (max-width: 899px) { .theme-btn .lbl { display: none; } }
 .chat-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
 .chat-count { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: .78rem; font-weight: 700; text-align: center; }
 .edge-btn {
@@ -375,7 +411,7 @@ h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
 .gate h2 { margin: 0 0 8px; font-size: 1.3rem; }
 .gate p { margin: 0; color: var(--muted); }
 .gate code { background: var(--bg); padding: 0 6px; border-radius: 4px; }
-body.gated .sidebar, body.gated .rside, body.gated .menu-btn, body.gated .chat-btn, body.gated .edge-btn, body.gated .filterbar, body.gated .to-top, body.gated .nav-backdrop { display: none !important; }
+body.gated .sidebar, body.gated .rside, body.gated .menu-btn, body.gated .chat-btn, body.gated .theme-btn, body.gated .edge-btn, body.gated .rs-edge, body.gated .filterbar, body.gated .to-top, body.gated .nav-backdrop { display: none !important; }
 body.gated .content { margin-left: 0; margin-right: 0; }
 body.editing { padding-bottom: 110px; }
 body.editing .send-pill, body.editing .to-top { bottom: 120px; }
@@ -399,7 +435,7 @@ body.editing .toast { bottom: 130px; }
   min-height: 38px; padding: 6px 12px; font: inherit; font-size: .9rem; color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
 }
-.filterbar input[type="search"] { flex: 1 1 200px; min-width: 0; }
+.filterbar input[type="search"] { flex: 1 1 140px; min-width: 120px; }
 @media (max-width: 640px) { /* điện thoại: một hàng cuộn ngang để header không chiếm nhiều chỗ */
   .filterbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .filterbar::-webkit-scrollbar { display: none; }
@@ -516,8 +552,12 @@ body.dragging .drop-hint { display: block; }
 [data-annot].annot-hover { outline: 2px dashed color-mix(in srgb, var(--c, var(--accent)) 75%, transparent); outline-offset: 3px; }
 [data-annot].annot-active { outline: 2px solid var(--c, var(--accent)); outline-offset: 3px; background: color-mix(in srgb, var(--c, var(--accent)) 8%, transparent); }
 [data-ccount] { background: color-mix(in srgb, var(--c, var(--accent)) 7%, transparent); box-shadow: inset 3px 0 0 var(--c, var(--accent)); }
-#title[data-ccount], .hero .updated[data-ccount], .nav-sec-link[data-ccount], .nav-game[data-ccount] { padding-left: 10px; }
-.chat-btn[data-ccount], .top-edit[data-ccount], .nav-tool[data-ccount] { box-shadow: inset 3px 0 0 var(--accent); }
+#title[data-ccount], .hero .updated[data-ccount] { padding-left: 10px; }
+.chat-btn[data-ccount] { box-shadow: inset 3px 0 0 var(--accent); }
+/* mục Tất cả nhận xét: nhãn game trên mỗi tin và ô chọn "Viết về" */
+.ctag.gtag { display: inline-block; margin-bottom: 2px; padding: 0 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-weight: 600; text-decoration: none; }
+.ctag.gtag:hover { border-color: var(--accent); }
+.composer select.to-select { width: 100%; min-height: 38px; padding: 6px 10px; font: inherit; font-size: .9rem; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
 .desc[data-ccount], .task[data-ccount], .links li[data-ccount], .game-title[data-ccount] { padding-left: 12px; }
 figure[data-ccount] { background: none; box-shadow: none; }
 figure[data-ccount] img { outline: 2px solid var(--c); outline-offset: -2px; }
@@ -566,7 +606,7 @@ body.annotating [data-annot] { outline: 1px dashed color-mix(in srgb, var(--acce
   .tool .chev { transition: none; }
 }
 @media print {
-  .sidebar, .rside, .edge-btn, .chat-btn, .menu-btn, .nav-backdrop, .topbar, .nav-btn, .icon-btn, .tool, .foot, .editbar, .add-task, .composer, .send-pill, .gcount, .skip, .link-btn, .annot-chip, .annot-pop { display: none !important; }
+  .sidebar, .rside, .edge-btn, .rs-edge, .chat-btn, .theme-btn, .menu-btn, .nav-backdrop, .topbar, .nav-btn, .icon-btn, .tool, .foot, .editbar, .add-task, .composer, .send-pill, .gcount, .skip, .link-btn, .annot-chip, .annot-pop { display: none !important; }
   .content { margin-left: 0; margin-right: 0; }
   .hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .game { break-inside: avoid; }

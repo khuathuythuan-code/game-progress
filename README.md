@@ -59,8 +59,9 @@ trình duyệt này.
 
 ## Dùng hằng ngày
 - **Bố cục ba cột**: **thanh bên trái** (điều hướng mục và game, Thu gọn tất cả, nút **Chỉnh sửa**), nội dung ở giữa,
-  **thanh bên phải** (khung **Trao đổi**). Hai thanh bên đều **thu gọn được**: nút ‹ ở đầu thanh trái, nút › ở đầu
-  khung phải; mở lại bằng nút nhỏ ở mép trái và nút **Trao đổi** trên header. Máy tính nhớ lựa chọn của bạn
+  **thanh bên phải** (khung **Trao đổi**). Hai thanh bên đều **thu gọn được**: nút ‹ ở đầu thanh trái; khung phải
+  có một **tay nắm nổi** (nút ›) nằm đúng mép giữa nội dung và khung, bấm để thu gọn, khi thu gọn nó dính vào mép
+  phải màn hình (nút ‹) để mở lại. Thanh trái mở lại bằng nút nhỏ ở mép trái; nút **Trao đổi** trên header cũng mở/đóng khung phải. Máy tính nhớ lựa chọn của bạn
   (lần đầu khung phải chỉ tự mở khi màn hình rộng từ 1280px). Trên điện thoại hai thanh bên là ngăn kéo: nút ☰ mở
   menu trái, nút **Trao đổi** mở khung phải; chạm nền mờ hoặc nhấn Esc để đóng.
 - **Chỉnh sửa**: nút ở đáy thanh bên trái. Thanh dưới cho biết "Đang lưu…" / "Đã lưu lúc …".
@@ -77,19 +78,24 @@ trình duyệt này.
 - **Xem**: mặc định gọn, không có nút sửa/xóa. Sếp thấy thay đổi của bạn ngay, không cần tải lại trang.
 - **Lọc game**: nằm trên **thanh header dính** ở đầu trang (cuộn trang vẫn thấy): ô tìm kiếm (gõ không dấu vẫn
   tìm được), lọc theo mục và theo thể loại. Thanh bên trái cũng cập nhật theo bộ lọc.
+- **Giao diện sáng/tối**: nút ở thanh header đổi vòng **Tự động** (theo hệ thống) → **Sáng** → **Tối**. Lựa chọn được
+  nhớ riêng trên từng trình duyệt, nên bạn và sếp có thể dùng giao diện khác nhau.
 - **Nhận xét và chat**: **mọi phần giao diện đều nhận xét được**: rê chuột vào bất kỳ phần nào rồi bấm
   **Nhận xét**. Gồm nội dung từng game (tên, ảnh, tiến độ, phiên bản, bản vá, mô tả, từng việc, từng link) và cả các
-  phần chung: tiêu đề trang, ngày cập nhật, bảng tổng quan, tiêu đề mục, thanh lọc, thanh bên, các nút. Nhận xét về
+  phần chung: tiêu đề trang, ngày cập nhật, bảng tổng quan, tiêu đề mục, thanh lọc, nút **Trao đổi**. Riêng hai thanh
+  bên (menu trái, khung Trao đổi phải) thì không cần nhận xét nên không có nút này. Nhận xét về
   các phần chung nằm ở mục **Toàn trang** trong khung Trao đổi. Với phần nhỏ (nút, ô nhập) nút "Nhận xét" hiện sát
   bên dưới để không che mất chính phần đó. Trên điện thoại, bấm nút **Nhận xét** ở thanh bên rồi chạm vào phần cần
   nhận xét (ở chế độ này chạm vào đâu cũng là chọn phần đó; bấm lại nút để thoát).
-  - **Khung Trao đổi bên phải** thay cho khung ở cuối từng game: mặc định **theo phần bạn đang xem** (đầu trang là
-    Toàn trang, cuộn tới game nào thì hiện trao đổi của game đó); chọn game khác ở ô trên cùng của khung, hoặc bấm
-    biểu tượng bình luận ở đầu một game để mở đúng khung của game đó. Nút **Trao đổi** trên header hiện số nhận xét
+  - **Khung Trao đổi bên phải** thay cho khung ở cuối từng game: mặc định là **Tất cả nhận xét** (gom nhận xét của
+    toàn trang và mọi game theo thời gian, mỗi tin có nhãn game, bấm nhãn để nhảy tới game đó; muốn viết thì chọn
+    "Viết về: …" ngay ở ô soạn). Ở ô chọn trên cùng có thể đổi sang **Theo phần đang xem** (cuộn tới game nào hiện
+    trao đổi của game đó), **Toàn trang** hoặc một game cụ thể; hoặc bấm biểu tượng bình luận ở đầu một game để mở
+    đúng khung của game đó. Nút **Trao đổi** trên header hiện số nhận xét
     chưa giải quyết của cả trang. Tin nhắn hiện tức thì cho cả hai bên.
 - **Xóa hoặc ẩn nhận xét**: mỗi tin có nút **Đã giải quyết** (ẩn tin đi, bấm "Hiện n nhận xét đã giải quyết"
   để xem lại, hoặc **Mở lại**) và nút **Xóa**. Người viết tin được dùng cả hai nút trên tin của mình; chủ trang
-  (khi đang **Chỉnh sửa**) dùng được trên mọi tin. Số nhận xét hiển thị chỉ đếm tin chưa giải quyết.
+  (trình duyệt đã bấm **Chỉnh sửa** ít nhất một lần, kể cả khi đang ở chế độ xem) dùng được trên mọi tin. Số nhận xét hiển thị chỉ đếm tin chưa giải quyết.
 - **Phiên bản của từng game**: mỗi game có ô chọn **Phiên bản** (bản mới nhất ghi `(latest)`) kèm khung **Bản vá**
   (ghi chú thay đổi, sửa lỗi). Chọn một bản cũ để xem đầy đủ thông tin lúc làm bản đó (mô tả, tiến độ, ảnh, việc,
   tài liệu, bản vá), bấm **Xem bản mới nhất** để quay lại. Bản cũ chỉ để xem, trừ ghi chú bản vá và số phiên bản
