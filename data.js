@@ -18,6 +18,8 @@
     (không đăng nhập hoặc tài khoản khác) nhắn hay chỉnh sửa đều gửi email báo cho chủ trang. ownerUid là cách khai
     báo thay thế bằng mã UID. Bỏ trống cả hai thì trang chạy như cũ (trình duyệt đã bấm Chỉnh sửa được xem là chủ trang).
     Cách tạo mã băm: README, mục "Chủ trang đăng nhập Google".
+    googleClientId = mã OAuth Web client ID (dạng 123-abc.apps.googleusercontent.com, công khai). Có mã này thì vừa vào
+    trang, nếu trình duyệt đang đăng nhập Gmail, Google tự hiện hộp "Tiếp tục với tài khoản …?" (tắt bằng autoPrompt: false).
     Các giá trị Firebase là thông tin công khai, không phải mật khẩu. Quyền truy cập nằm ở link riêng
     (đuôi ?k=mã-bí-mật) và ở quy tắc bảo mật phía Firebase.
   - notify (Web3Forms): thông báo email cho bạn khi người khác nhắn. accessKey chỉ cho phép gửi thư về
@@ -28,7 +30,7 @@ window.PROGRESS = {
   subtitle: "Báo cáo tiến độ các dự án game của team",
   updated: "20/11/2026",
   notify: { url: "https://api.web3forms.com/submit", accessKey: "1be8f425-c4fd-433d-b4e3-1bb481bd5bb0" },
-  db: { provider: "rtdb", ownerEmailHash: "fe171a0b176baf98d8adc08fd0481bca89b4b16075b3941022511349ea74fcec", ownerUid: "", firebase: {
+  db: { provider: "rtdb", googleClientId: "", autoPrompt: true, ownerEmailHash: "fe171a0b176baf98d8adc08fd0481bca89b4b16075b3941022511349ea74fcec", ownerUid: "", firebase: {
     apiKey: "AIzaSyCATMwy-xK7Pzt6eGZF5oUmlEp_0V9mK8Q",
     appId: "1:612486095913:web:c2f7c82eb794f6a465e838",
     authDomain: "gameprogress-2a12c.firebaseapp.com",

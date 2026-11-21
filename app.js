@@ -1293,6 +1293,33 @@
       am.onAuthStateChanged(auth, async (u) => { authUser = u; authIsOwner = await computeOwner(u); onAuthChange(); res(); }, () => res());
     });
     await Promise.race([first, new Promise((r) => setTimeout(r, 5000))]); // đợi biết đã đăng nhập sẵn chưa, tối đa 5 giây
+    if (!authUser) startGooglePrompt(); // chưa đăng nhập: tự hỏi "tiếp tục với tài khoản Google này?"
+  }
+  // Hộp gợi ý đăng nhập nhanh của Google (One Tap): vừa vào trang, nếu trình duyệt đang đăng nhập Gmail thì hiện
+  // "Tiếp tục với tài khoản …". Cần mã OAuth Web client ID (googleClientId trong data.js); để trống thì không hiện.
+  function startGooglePrompt() {
+    const cid = String(CHAT.googleClientId || "").trim();
+    if (!AUTH_ON || !cid || CHAT.autoPrompt === false) return;
+    const run = () => {
+      try {
+        window.google.accounts.id.initialize({ client_id: cid, callback: onGoogleCredential, auto_select: true, cancel_on_tap_outside: false, use_fedcm_for_prompt: true });
+        window.google.accounts.id.prompt();
+      } catch (e) {}
+    };
+    if (window.google && window.google.accounts && window.google.accounts.id) { run(); return; }
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client"; s.async = true; s.onload = run;
+    document.head.appendChild(s); // lỗi tải (mạng, bị chặn) thì thôi, vẫn đăng nhập được bằng nút trong hộp thoại
+  }
+  async function onGoogleCredential(resp) {
+    if (!authApi || !resp || !resp.credential) return;
+    try {
+      const cred = authApi.am.GoogleAuthProvider.credential(resp.credential);
+      await authApi.am.signInWithCredential(authApi.auth, cred);
+      authUser = authApi.auth.currentUser; authIsOwner = await computeOwner(authUser);
+      onAuthChange();
+      toast(authIsOwner ? "Đã đăng nhập đúng chủ trang. Từ giờ không có email báo cho chính bạn." : "Đã đăng nhập. Bạn không phải chủ trang nên nhận xét và chỉnh sửa vẫn được báo email cho chủ trang.");
+    } catch (e) { toast(authErrorText(e)); }
   }
   function onAuthChange() {
     refreshAuthUi();
@@ -1347,7 +1374,10 @@
   $("auth-close").addEventListener("click", () => $("auth-dialog").close());
   $("auth-close2").addEventListener("click", () => $("auth-dialog").close());
   $("auth-signout").addEventListener("click", () => {
-    if (authApi) authApi.am.signOut(authApi.auth).then(() => { $("auth-dialog").close(); toast("Đã đăng xuất"); });
+    if (authApi) authApi.am.signOut(authApi.auth).then(() => {
+      try { window.google.accounts.id.disableAutoSelect(); } catch (e) {} // đăng xuất rồi thì Google đừng tự đăng nhập lại
+      $("auth-dialog").close(); toast("Đã đăng xuất");
+    });
   });
   $("auth-copy").addEventListener("click", () => copyText(authUser ? authUser.uid : "", (ok) => toast(ok ? "Đã sao chép UID" : "Không sao chép được, hãy bôi đen và copy thủ công")));
   $("auth-btn").addEventListener("click", openAuth);

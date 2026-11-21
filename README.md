@@ -140,7 +140,15 @@ Làm một lần:
    $e = "email.cua.ban@gmail.com"
    -join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($e.ToLower())) | ForEach-Object { $_.ToString("x2") })
    ```
-5. Tùy chọn, chặn hẳn phía máy chủ (người khác không sửa được nội dung nữa, chỉ nhắn được): mở
+5. Tùy chọn, để trang **tự hỏi đăng nhập ngay khi vào** ("Tiếp tục với tài khoản …?" nếu trình duyệt đang đăng nhập Gmail):
+   - Firebase Console > Authentication > Sign-in method > **Google** > mục **Web SDK configuration** > sao chép
+     **Web client ID** (dạng `123-abc.apps.googleusercontent.com`), dán vào `googleClientId` trong `data.js`.
+   - Google Cloud Console (cùng dự án `gameprogress-2a12c`) > **APIs & Services** > **Credentials** > mở "Web client
+     (auto created by Google Service)" > **Authorized JavaScript origins** > Add URI
+     `https://khuathuythuan-code.github.io` > Save (có thể mất vài phút để có hiệu lực).
+   - Để trống `googleClientId` thì không hiện hộp tự động (vẫn đăng nhập được bằng nút). Đặt `autoPrompt: false`
+     nếu không muốn sếp thấy hộp này. Hộp chỉ hiện khi chưa đăng nhập; nếu bạn tắt hộp, Google tạm không hiện lại một lúc.
+6. Tùy chọn, chặn hẳn phía máy chủ (người khác không sửa được nội dung nữa, chỉ nhắn được): mở
    `database.rules.owner.json`, thay `OWNER_EMAIL_HERE` bằng Gmail chủ trang, dán vào Realtime Database > Rules >
    Publish. Khi đó bước email tóm tắt chỉnh sửa không còn cần cho người khác vì họ không ghi được. Nếu bị khóa
    không sửa được, dán lại `database.rules.json` để về như cũ. Đừng commit file rules đã điền email nếu bạn muốn
