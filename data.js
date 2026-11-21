@@ -13,6 +13,9 @@
     provider "firebase" = Firebase Firestore (cần projectId). Quy tắc: firestore.rules.
     provider ""         = chưa kết nối (trang hiện dữ liệu mẫu, sửa chỉ nằm trên trình duyệt này).
     provider "local"    = thử giữa các tab cùng một trình duyệt (chỉ để thử, đừng dùng thật).
+    ownerUid = mã định danh (UID) của chủ trang trong Firebase Authentication. Có ownerUid thì chỉ người đăng nhập
+    bằng email đúng tài khoản đó mới vào được chế độ Chỉnh sửa (xem README, mục "Đăng nhập chủ trang").
+    Chưa có ownerUid thì trang chạy như cũ (trình duyệt đã bấm Chỉnh sửa được xem là chủ trang).
     Các giá trị Firebase là thông tin công khai, không phải mật khẩu. Quyền truy cập nằm ở link riêng
     (đuôi ?k=mã-bí-mật) và ở quy tắc bảo mật phía Firebase.
   - notify (Web3Forms): thông báo email cho bạn khi người khác nhắn. accessKey chỉ cho phép gửi thư về
@@ -23,10 +26,12 @@ window.PROGRESS = {
   subtitle: "Báo cáo tiến độ các dự án game của team",
   updated: "20/11/2026",
   notify: { url: "https://api.web3forms.com/submit", accessKey: "1be8f425-c4fd-433d-b4e3-1bb481bd5bb0" },
-  db: { provider: "rtdb", firebase: {
-    apiKey: "", appId: "",
+  db: { provider: "rtdb", ownerUid: "", firebase: {
+    apiKey: "AIzaSyCATMwy-xK7Pzt6eGZF5oUmlEp_0V9mK8Q",
+    appId: "1:612486095913:web:c2f7c82eb794f6a465e838",
     authDomain: "gameprogress-2a12c.firebaseapp.com",
     projectId: "gameprogress-2a12c",
+    messagingSenderId: "612486095913",
     databaseURL: "https://gameprogress-2a12c-default-rtdb.asia-southeast1.firebasedatabase.app"
   } },
   feedbackEmail: "",

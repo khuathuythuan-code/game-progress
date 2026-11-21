@@ -530,6 +530,10 @@ body.dragging .drop-hint { display: block; }
 .gh-dialog label { display: block; margin: 12px 0 4px; font-size: .9rem; font-weight: 600; }
 .gh-dialog textarea { width: 100%; padding: 9px 12px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; resize: vertical; }
 .gh-actions { display: flex; gap: 8px; margin-top: 14px; }
+.auth-msg { min-height: 1.4em; margin: 8px 0 0; color: var(--accent); }
+.auth-link { justify-self: center; text-decoration: none; color: var(--muted); }
+.auth-link:hover { color: var(--accent); text-decoration: underline; }
+.gh-dialog input[readonly] { font-family: ui-monospace, Consolas, monospace; font-size: .82rem; }
 
 /* ---------- Nhận xét đã giải quyết ---------- */
 .msg.resolved .bubble, .msg.resolved .avatar { opacity: .55; }

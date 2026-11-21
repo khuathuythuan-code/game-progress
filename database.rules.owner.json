@@ -1,0 +1,264 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$room": {
+        ".read": "$room.length >= 20",
+        "messages": {
+          "$id": {
+            ".validate": "newData.hasChildren(['gid', 'author', 'text', 'ts', 'cid'])",
+            "gid": {
+              ".validate": "newData.isString() && newData.val().length <= 80"
+            },
+            "author": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "text": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 600"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "cid": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "tid": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "tlabel": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "resolved": {
+              ".validate": "newData.isBoolean()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          ".write": "$room.length >= 20"
+        },
+        "content": {
+          "site": {
+            ".validate": "newData.hasChildren(['title', 'sections'])",
+            "title": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "updated": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "sections": {
+              "$i": {
+                ".validate": "newData.hasChildren(['key', 'title'])",
+                "key": {
+                  ".validate": "newData.isString() && newData.val().length <= 40"
+                },
+                "title": {
+                  ".validate": "newData.isString() && newData.val().length <= 100"
+                },
+                "note": {
+                  ".validate": "newData.isString() && newData.val().length <= 300"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          },
+          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+        },
+        "games": {
+          "$id": {
+            ".validate": "newData.hasChildren(['sec', 'order', 'name', 'progress'])",
+            "sec": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "order": {
+              ".validate": "newData.isNumber()"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "genre": {
+              ".validate": "newData.isString() && newData.val().length <= 100"
+            },
+            "platform": {
+              ".validate": "newData.isString() && newData.val().length <= 100"
+            },
+            "meta": {
+              ".validate": "newData.isString() && newData.val().length <= 200"
+            },
+            "description": {
+              ".validate": "newData.isString() && newData.val().length <= 5000"
+            },
+            "progress": {
+              ".validate": "newData.isNumber()"
+            },
+            "links": {
+              "$i": {
+                "title": {
+                  ".validate": "newData.isString() && newData.val().length <= 200"
+                },
+                "url": {
+                  ".validate": "newData.isString() && newData.val().length <= 500"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "tasks": {
+              "$i": {
+                ".validate": "newData.hasChildren(['id', 'text', 'done'])",
+                "id": {
+                  ".validate": "newData.isString() && newData.val().length <= 80"
+                },
+                "text": {
+                  ".validate": "newData.isString() && newData.val().length <= 500"
+                },
+                "done": {
+                  ".validate": "newData.isBoolean()"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+        },
+        "images": {
+          "$id": {
+            ".validate": "newData.hasChildren(['gid', 'order', 'src'])",
+            "gid": {
+              ".validate": "newData.isString() && newData.val().length <= 80"
+            },
+            "order": {
+              ".validate": "newData.isNumber()"
+            },
+            "caption": {
+              ".validate": "newData.isString() && newData.val().length <= 300"
+            },
+            "src": {
+              ".validate": "newData.isString() && newData.val().length <= 700000"
+            },
+            "retired": {
+              ".validate": "newData.isBoolean()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+        },
+        "versions": {
+          "$id": {
+            ".validate": "newData.hasChildren(['gid', 'order', 'version', 'date'])",
+            "gid": {
+              ".validate": "newData.isString() && newData.val().length <= 80"
+            },
+            "order": {
+              ".validate": "newData.isNumber()"
+            },
+            "version": {
+              ".validate": "newData.isString() && newData.val().length <= 60"
+            },
+            "date": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "notes": {
+              ".validate": "newData.isString() && newData.val().length <= 5000"
+            },
+            "snap": {
+              "sec": {
+                ".validate": "newData.isString() && newData.val().length <= 40"
+              },
+              "name": {
+                ".validate": "newData.isString() && newData.val().length <= 200"
+              },
+              "genre": {
+                ".validate": "newData.isString() && newData.val().length <= 100"
+              },
+              "platform": {
+                ".validate": "newData.isString() && newData.val().length <= 100"
+              },
+              "meta": {
+                ".validate": "newData.isString() && newData.val().length <= 200"
+              },
+              "description": {
+                ".validate": "newData.isString() && newData.val().length <= 5000"
+              },
+              "progress": {
+                ".validate": "newData.isNumber()"
+              },
+              "links": {
+                "$i": {
+                  "title": {
+                    ".validate": "newData.isString() && newData.val().length <= 200"
+                  },
+                  "url": {
+                    ".validate": "newData.isString() && newData.val().length <= 500"
+                  },
+                  "$other": {
+                    ".validate": false
+                  }
+                }
+              },
+              "tasks": {
+                "$i": {
+                  "id": {
+                    ".validate": "newData.isString() && newData.val().length <= 80"
+                  },
+                  "text": {
+                    ".validate": "newData.isString() && newData.val().length <= 500"
+                  },
+                  "done": {
+                    ".validate": "newData.isBoolean()"
+                  },
+                  "$other": {
+                    ".validate": false
+                  }
+                }
+              },
+              "images": {
+                "$i": {
+                  "iid": {
+                    ".validate": "newData.isString() && newData.val().length <= 100"
+                  },
+                  "src": {
+                    ".validate": "newData.isString() && newData.val().length <= 700000"
+                  },
+                  "caption": {
+                    ".validate": "newData.isString() && newData.val().length <= 300"
+                  },
+                  "$other": {
+                    ".validate": false
+                  }
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          ".write": "$room.length >= 20 && auth != null && auth.uid === 'OWNER_UID_HERE'"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}

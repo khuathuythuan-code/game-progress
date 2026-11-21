@@ -40,7 +40,14 @@
     if (!myCid) { myCid = "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem(CID_KEY, myCid); }
   } catch (e) { myCid = myCid || "u" + Math.random().toString(36).slice(2, 12); }
   const canComment = !chatOn || !!room; // bật chat mà không có link bí mật thì chỉ xem
-  const isOwner = () => { try { return localStorage.getItem(OWNER_KEY) === "1"; } catch (e) { return false; } };
+  // Đăng nhập email (Firebase Authentication, link gửi qua email, không mật khẩu) để xác nhận chủ trang.
+  // AUTH_ON: có apiKey nên đăng nhập được. AUTH_ENFORCED: đã khai báo ownerUid, chỉ đúng tài khoản đó là chủ trang.
+  const AUTH_ON = chatOn && CHAT.provider === "rtdb" && !!(CHAT.firebase && CHAT.firebase.apiKey);
+  const OWNER_UID = String(CHAT.ownerUid || "").trim();
+  const AUTH_ENFORCED = AUTH_ON && !!OWNER_UID;
+  let authUser = null;  // người đang đăng nhập (null = chưa)
+  const legacyOwner = () => { try { return localStorage.getItem(OWNER_KEY) === "1"; } catch (e) { return false; } };
+  const isOwner = () => AUTH_ENFORCED ? (!!authUser && authUser.uid === OWNER_UID) : legacyOwner();
   let remote = [];      // tin nhắn từ máy chủ chat
   let chatApi = null;   // adapter đã kết nối
   let chatReady = false;
@@ -120,6 +127,7 @@
   } catch (e) {
     ui.editing = /[?&]edit/.test(location.search);
   }
+  if (AUTH_ENFORCED) ui.editing = false; // chỉ bật lại sau khi đăng nhập xác nhận đúng chủ trang
   // Nhận xét đi kèm trong link email (?cm=...): chỉ để hiển thị, không lưu
   try {
     const raw = new URLSearchParams(location.search).get("cm");
@@ -1210,12 +1218,98 @@
   });
 
   // ---------- Chế độ xem / chỉnh sửa ----------
+  // ---------- Đăng nhập chủ trang bằng email ----------
+  const SIGNIN_EMAIL_KEY = "game-progress-signin-email";
+  let authApi = null; // { am: module firebase-auth, auth }
+  async function initAuth(app, am) {
+    const auth = am.getAuth(app);
+    authApi = { am: am, auth: auth };
+    const first = new Promise((res) => {
+      am.onAuthStateChanged(auth, (u) => { authUser = u; onAuthChange(); res(); }, () => res());
+    });
+    if (am.isSignInWithEmailLink(auth, location.href)) { // vừa bấm link trong email
+      let email = "";
+      try { email = localStorage.getItem(SIGNIN_EMAIL_KEY) || ""; } catch (e) {}
+      if (!email) email = (prompt("Nhập email bạn đã dùng để nhận link đăng nhập:") || "").trim();
+      if (email) {
+        try {
+          await am.signInWithEmailLink(auth, email, location.href);
+          try { localStorage.removeItem(SIGNIN_EMAIL_KEY); localStorage.setItem(MODE_KEY, "1"); } catch (e) {}
+          toast("Đã đăng nhập bằng email");
+        } catch (e) { toast("Link đăng nhập không dùng được hoặc đã hết hạn. Hãy gửi link mới."); }
+      }
+      try { history.replaceState(null, "", location.pathname + (room ? "?k=" + room : "") + location.hash); } catch (e) {} // bỏ mã đăng nhập khỏi thanh địa chỉ
+    }
+    await Promise.race([first, new Promise((r) => setTimeout(r, 5000))]);
+  }
+  function onAuthChange() {
+    if (AUTH_ENFORCED) {
+      if (isOwner()) { try { ui.editing = localStorage.getItem(MODE_KEY) === "1"; } catch (e) { ui.editing = false; } }
+      else ui.editing = false;
+    }
+    refreshAuthUi();
+    try { render(); } catch (e) {}
+  }
+  const authMsg = (t) => { $("auth-msg").textContent = t || ""; };
+  function refreshAuthUi() {
+    // Khi chưa khai báo ownerUid, chỉ trình duyệt của chủ trang (đã từng bấm Chỉnh sửa) mới thấy nút đăng nhập, người xem thì không
+    $("auth-btn").hidden = !(AUTH_ON && (authUser || (!OWNER_UID && legacyOwner())));
+    $("auth-btn").textContent = authUser ? "Tài khoản đăng nhập" : "Đăng nhập email";
+    $("auth-out").hidden = !!authUser;
+    $("auth-in").hidden = !authUser;
+    if (!authUser) return;
+    $("auth-who").textContent = authUser.email || "(không có email)";
+    $("auth-uid-box").hidden = !!OWNER_UID;
+    $("auth-uid").textContent = authUser.uid;
+    $("auth-status").textContent = !OWNER_UID ? "Chưa khai báo chủ trang. Hãy lấy mã UID bên dưới để khai báo." :
+      isOwner() ? "Đúng chủ trang. Bạn dùng được chế độ Chỉnh sửa, xóa mọi nhận xét và không bị gửi email báo cho chính mình." :
+      "Tài khoản này không phải chủ trang nên không vào được chế độ Chỉnh sửa.";
+  }
+  function authErrorText(e) {
+    const c = (e && e.code) || "";
+    if (c === "auth/configuration-not-found") return "Dự án Firebase chưa bật Authentication. Vào Firebase Console > Authentication > bấm Get started, rồi bật Email/Password và Email link.";
+    if (c === "auth/operation-not-allowed") return "Firebase chưa bật đăng nhập bằng link email (Authentication > Sign-in method > Email/Password > bật Email link).";
+    if (c === "auth/unauthorized-continue-uri") return "Tên miền trang này chưa được thêm vào Authentication > Settings > Authorized domains.";
+    if (c === "auth/invalid-email") return "Email chưa đúng.";
+    if (c === "auth/too-many-requests") return "Gửi quá nhiều lần, hãy thử lại sau ít phút.";
+    return "Không gửi được link đăng nhập" + (c ? " (" + c + ")" : "") + ".";
+  }
+  function openAuth() {
+    if (!AUTH_ON) return;
+    if (!authApi) { toast("Đang kết nối dịch vụ đăng nhập, thử lại sau ít giây."); return; }
+    authMsg(""); refreshAuthUi();
+    const d = $("auth-dialog");
+    if (d.showModal && !d.open) d.showModal();
+  }
+  async function sendAuthLink() {
+    const email = $("auth-email").value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { authMsg("Email chưa đúng định dạng."); return; }
+    const b = $("auth-send"); b.disabled = true; authMsg("Đang gửi…");
+    try {
+      await authApi.am.sendSignInLinkToEmail(authApi.auth, email, { url: location.origin + location.pathname + (room ? "?k=" + room : ""), handleCodeInApp: true });
+      try { localStorage.setItem(SIGNIN_EMAIL_KEY, email); } catch (e) {}
+      authMsg("Đã gửi link. Mở hộp thư (kể cả mục Spam) và bấm link, trang sẽ tự đăng nhập.");
+    } catch (e) { authMsg(authErrorText(e)); }
+    b.disabled = false;
+  }
+  $("auth-send").addEventListener("click", sendAuthLink);
+  $("auth-email").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendAuthLink(); } });
+  $("auth-close").addEventListener("click", () => $("auth-dialog").close());
+  $("auth-close2").addEventListener("click", () => $("auth-dialog").close());
+  $("auth-signout").addEventListener("click", () => {
+    if (authApi) authApi.am.signOut(authApi.auth).then(() => { $("auth-dialog").close(); toast("Đã đăng xuất"); });
+  });
+  $("auth-copy").addEventListener("click", () => copyText(authUser ? authUser.uid : "", (ok) => toast(ok ? "Đã sao chép UID" : "Không sao chép được, hãy bôi đen và copy thủ công")));
+  $("auth-btn").addEventListener("click", openAuth);
+
   function setEditing(on) {
+    if (on && AUTH_ENFORCED && !isOwner()) { openAuth(); return; } // chỉ chủ trang đã đăng nhập mới được sửa
     ui.editing = on;
     try {
       localStorage.setItem(MODE_KEY, on ? "1" : "0");
       if (on) localStorage.setItem(OWNER_KEY, "1"); // máy này là của chủ trang: không tự gửi email cho chính mình
     } catch (e) {}
+    refreshAuthUi();
     render();
     toast(on ? "Đã bật chế độ chỉnh sửa" : "Đã chuyển sang chế độ xem");
   }
@@ -1805,8 +1899,12 @@
   async function createChatApi() {
     if (CHAT.provider === "rtdb") {
       const base = "https://www.gstatic.com/firebasejs/10.14.1/";
-      const [appMod, rt] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-database.js")]);
+      const [appMod, rt, am] = await Promise.all([
+        import(base + "firebase-app.js"), import(base + "firebase-database.js"),
+        AUTH_ON ? import(base + "firebase-auth.js").catch(() => null) : null // lỗi tải thì vẫn chạy được, chỉ không đăng nhập
+      ]);
       const app = appMod.initializeApp(CHAT.firebase);
+      if (am) await initAuth(app, am); // phải có trước khi ghi dữ liệu để Firebase gắn đúng tài khoản vào mọi lần ghi
       return makeRtdbAdapter(rt, rt.getDatabase(app, CHAT.firebase.databaseURL), room);
     }
     if (CHAT.provider === "firebase") {

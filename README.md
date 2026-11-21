@@ -118,6 +118,22 @@ trình duyệt này.
   chỉnh sửa. **Nhập sẽ thay toàn bộ nội dung hiện tại.** Không có lịch sử git cho nội dung, nên hãy
   tải bản sao lưu định kỳ.
 
+## Đăng nhập chủ trang bằng email (tùy chọn, làm một lần)
+Mặc định trang nhận ra chủ trang bằng việc trình duyệt đã bấm **Chỉnh sửa**. Muốn chắc chắn hơn (đổi máy vẫn đúng,
+và người có link bí mật không thể sửa nội dung), dùng đăng nhập bằng link gửi qua email, **không mật khẩu**.
+Sếp và người xem vẫn vào bằng link bí mật, không phải đăng nhập.
+1. Firebase Console > **Authentication** > **Get started**. Mục **Sign-in method** > **Email/Password** > bật,
+   và bật thêm **Email link (passwordless sign-in)** > Save.
+2. **Authentication > Settings > Authorized domains** > thêm `khuathuythuan-code.github.io`.
+3. Mở trang bằng link bí mật của bạn, bấm **Chỉnh sửa** một lần để trình duyệt nhận ra bạn là chủ trang, rồi bấm
+   **Đăng nhập email** ở chân thanh bên trái. Nhập email, mở link trong thư. Hộp thoại sẽ hiện **UID** của bạn
+   (mã định danh, không chứa email) kèm nút sao chép.
+4. Dán UID vào `ownerUid` trong `data.js` (mục `db`), rồi push. Từ đây chỉ tài khoản đó vào được chế độ Chỉnh sửa.
+5. Muốn chặn cả phía máy chủ: mở `database.rules.owner.json`, thay `OWNER_UID_HERE` bằng UID, dán vào
+   Realtime Database > Rules > Publish. Khi đó chỉ chủ trang ghi được nội dung (game, ảnh, phiên bản); người có
+   link bí mật vẫn đọc được và vẫn nhắn được. Nếu đổi quy tắc này mà không đăng nhập được thì chỉnh sửa sẽ bị từ chối,
+   khi đó dán lại `database.rules.json` để về như cũ.
+
 ## Giới hạn cần biết
 - Ảnh nằm trong cơ sở dữ liệu nên mỗi ảnh được nén còn khoảng 100 đến 300KB; Firestore giới hạn 1MB mỗi tài liệu.
   Số lượng ảnh nhiều thì trang tải chậm hơn. Ảnh cũ chỉ còn thuộc phiên bản cũ vẫn chiếm chỗ trong cơ sở dữ liệu.
