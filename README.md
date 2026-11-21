@@ -58,7 +58,12 @@ Chưa điền cấu hình Firebase (`provider: ""`) thì trang hiện dữ liệ
 trình duyệt này.
 
 ## Dùng hằng ngày
-- **Chỉnh sửa**: nút ở góc phải thanh trên cùng. Thanh dưới cho biết "Đang lưu…" / "Đã lưu lúc …".
+- **Bố cục ba cột**: **thanh bên trái** (điều hướng mục và game, Thu gọn tất cả, nút **Chỉnh sửa**), nội dung ở giữa,
+  **thanh bên phải** (khung **Trao đổi**). Hai thanh bên đều **thu gọn được**: nút ‹ ở đầu thanh trái, nút › ở đầu
+  khung phải; mở lại bằng nút nhỏ ở mép trái và nút **Trao đổi** trên header. Máy tính nhớ lựa chọn của bạn
+  (lần đầu khung phải chỉ tự mở khi màn hình rộng từ 1280px). Trên điện thoại hai thanh bên là ngăn kéo: nút ☰ mở
+  menu trái, nút **Trao đổi** mở khung phải; chạm nền mờ hoặc nhấn Esc để đóng.
+- **Chỉnh sửa**: nút ở đáy thanh bên trái. Thanh dưới cho biết "Đang lưu…" / "Đã lưu lúc …".
   - **Chữ**: bấm vào tên game, thể loại, nền tảng, ghi chú, mô tả, từng việc, chú thích ảnh (ô viền nét đứt)
     và gõ. Rời ô là tự lưu. Enter để xong (riêng mô tả, Enter xuống dòng).
   - **Ảnh**: **Thay ảnh** / **Xóa** trên mỗi ảnh, **+ Thêm ảnh** ở cuối dải ảnh. Ảnh tự thu nhỏ (tối đa 1280px)
@@ -70,11 +75,18 @@ trình duyệt này.
     ô bên phải (dùng cho điện thoại). Sang "Hoàn thành" thì tiến độ thành 100%, sang "Dự kiến" thì về 0%.
   - Mọi thao tác xóa/chuyển có nút **Hoàn tác** trong 7 giây.
 - **Xem**: mặc định gọn, không có nút sửa/xóa. Sếp thấy thay đổi của bạn ngay, không cần tải lại trang.
-- **Lọc game**: nằm ngay trên **thanh header dính** ở đầu trang (hàng dưới, cuộn trang vẫn thấy): ô tìm kiếm
-  (gõ không dấu vẫn tìm được), lọc theo mục và theo thể loại. Hàng trên là điều hướng mục và nút **Chỉnh sửa**.
-- **Nhận xét và chat**: rê chuột vào bất kỳ phần nào (ảnh, tiến độ, mô tả, từng việc, từng link) rồi bấm
-  **Nhận xét**. Trên điện thoại, bấm nút **Nhận xét** ở thanh trên rồi chạm vào phần cần nhận xét.
-  Tin nhắn hiện tức thì cho cả hai bên, mỗi game có khung **Trao đổi** ở cuối.
+- **Lọc game**: nằm trên **thanh header dính** ở đầu trang (cuộn trang vẫn thấy): ô tìm kiếm (gõ không dấu vẫn
+  tìm được), lọc theo mục và theo thể loại. Thanh bên trái cũng cập nhật theo bộ lọc.
+- **Nhận xét và chat**: **mọi phần giao diện đều nhận xét được**: rê chuột vào bất kỳ phần nào rồi bấm
+  **Nhận xét**. Gồm nội dung từng game (tên, ảnh, tiến độ, phiên bản, bản vá, mô tả, từng việc, từng link) và cả các
+  phần chung: tiêu đề trang, ngày cập nhật, bảng tổng quan, tiêu đề mục, thanh lọc, thanh bên, các nút. Nhận xét về
+  các phần chung nằm ở mục **Toàn trang** trong khung Trao đổi. Với phần nhỏ (nút, ô nhập) nút "Nhận xét" hiện sát
+  bên dưới để không che mất chính phần đó. Trên điện thoại, bấm nút **Nhận xét** ở thanh bên rồi chạm vào phần cần
+  nhận xét (ở chế độ này chạm vào đâu cũng là chọn phần đó; bấm lại nút để thoát).
+  - **Khung Trao đổi bên phải** thay cho khung ở cuối từng game: mặc định **theo phần bạn đang xem** (đầu trang là
+    Toàn trang, cuộn tới game nào thì hiện trao đổi của game đó); chọn game khác ở ô trên cùng của khung, hoặc bấm
+    biểu tượng bình luận ở đầu một game để mở đúng khung của game đó. Nút **Trao đổi** trên header hiện số nhận xét
+    chưa giải quyết của cả trang. Tin nhắn hiện tức thì cho cả hai bên.
 - **Xóa hoặc ẩn nhận xét**: mỗi tin có nút **Đã giải quyết** (ẩn tin đi, bấm "Hiện n nhận xét đã giải quyết"
   để xem lại, hoặc **Mở lại**) và nút **Xóa**. Người viết tin được dùng cả hai nút trên tin của mình; chủ trang
   (khi đang **Chỉnh sửa**) dùng được trên mọi tin. Số nhận xét hiển thị chỉ đếm tin chưa giải quyết.
