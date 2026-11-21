@@ -249,17 +249,35 @@
       '<button class="icon-btn" data-action="del-task" data-id="' + esc(t.id) + '" title="Xóa việc này" aria-label="Xóa việc: ' + esc(t.text) + '">✕</button></li>';
   }
 
+  // Ảnh đại diện chữ cái đầu, màu theo tên (cùng một tên luôn cùng một màu)
+  function avatarHtml(name) {
+    const s = String(name || "?").trim() || "?";
+    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+    const w = s.split(/\s+/), ch = (w[w.length - 1][0] || "?").toUpperCase();
+    return '<span class="avatar" style="--h:' + h + '" aria-hidden="true">' + esc(ch) + "</span>";
+  }
+  const ICON_OK = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ICON_UNDO = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ICON_DEL = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // Khung một tin nhắn dùng chung cho khung Trao đổi và cửa sổ nhận xét nhỏ
+  function msgShell(o) {
+    return '<li class="msg' + (o.cls || "") + '">' + avatarHtml(o.author) + '<div class="msg-main"><div class="msg-head"><b>' + esc(o.author) + "</b><time>" + esc(fmtTime(o.time)) + "</time>" + (o.badge || "") + "</div>" +
+      (o.ctx ? '<div class="msg-ctx">' + o.ctx + "</div>" : "") +
+      '<p class="bubble">' + esc(o.text) + "</p>" + (o.foot ? '<div class="msg-foot">' + o.foot + "</div>" : "") + "</div></li>";
+  }
+
   function renderMsg(g, c, withTag, withGame) {
     // Người viết, hoặc chủ trang (trình duyệt đã từng bấm Chỉnh sửa), được xóa hoặc đánh dấu "đã giải quyết" (ẩn đi)
     const canAct = c.mine || ui.editing || isOwner();
     const canResolve = canAct && (c.remote || c.mine);
-    return '<li class="msg' + (c.mine ? " mine" : "") + (c.resolved ? " resolved" : "") + '"><div class="msg-meta"><b>' + esc(c.author) + "</b><time>" + esc(fmtTime(c.time)) + "</time>" +
-      (c.resolved ? '<span class="badge ok">✓ Đã giải quyết</span>' : "") +
-      (canResolve ? '<button class="link-btn" data-action="resolve-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" data-to="' + (c.resolved ? "0" : "1") + '">' + (c.resolved ? "Mở lại" : "Đã giải quyết") + "</button>" : "") +
-      (canAct ? '<button class="link-btn" data-action="del-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" aria-label="Xóa nhận xét của ' + esc(c.author) + '">Xóa</button>' : "") + "</div>" +
-      (withGame ? '<a class="ctag gtag" href="' + (g.id === SITE_ID ? "#" : "#g-" + esc(g.id)) + '" data-action="goto-game" data-id="' + esc(g.id) + '">' + esc(g.name) + "</a>" : "") +
-      (withTag && c.target ? '<a class="ctag" href="#' + esc(c.target.id) + '" data-action="goto-target" data-id="' + esc(c.target.id) + '">về: ' + esc(c.target.label) + "</a>" : "") +
-      '<p class="bubble">' + esc(c.text) + "</p></li>";
+    return msgShell({
+      cls: (c.mine ? " mine" : "") + (c.resolved ? " resolved" : ""), author: c.author, time: c.time, text: c.text,
+      badge: c.resolved ? '<span class="badge ok">Đã giải quyết</span>' : "",
+      ctx: (withGame ? '<a class="ctag gtag" href="' + (g.id === SITE_ID ? "#" : "#g-" + esc(g.id)) + '" data-action="goto-game" data-id="' + esc(g.id) + '">' + esc(g.name) + "</a>" : "") +
+        (withTag && c.target ? '<a class="ctag" href="#' + esc(c.target.id) + '" data-action="goto-target" data-id="' + esc(c.target.id) + '">' + esc(c.target.label) + "</a>" : ""),
+      foot: (canResolve ? '<button class="act ok" type="button" data-action="resolve-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" data-to="' + (c.resolved ? "0" : "1") + '">' + (c.resolved ? ICON_UNDO + "Mở lại" : ICON_OK + "Đã giải quyết") + "</button>" : "") +
+        (canAct ? '<button class="act danger" type="button" data-action="del-comment" data-game="' + esc(g.id) + '" data-id="' + esc(c.id) + '" aria-label="Xóa nhận xét của ' + esc(c.author) + '">' + ICON_DEL + "Xóa</button>" : "")
+    });
   }
 
   // Danh sách tin: chưa giải quyết hiện sẵn, đã giải quyết bị ẩn (bấm để hiện lại)
@@ -280,7 +298,7 @@
   function threadHtml(g) {
     const list = allComments(g);
     const t = threadList(g, list, g.id, true, "");
-    return "<h4>" + (chatOn ? "Trao đổi" : "Nhận xét") + (t.open.length ? " (" + t.open.length + ")" : "") + "</h4>" +
+    return '<h4 class="thread-title">' + (chatOn ? "Trao đổi" : "Nhận xét") + (t.open.length ? '<span class="count">' + t.open.length + "</span>" : "") + "</h4>" +
       (list.length ?
         (!t.open.length ? '<p class="no-comments">Mọi nhận xét đã được giải quyết.</p>' : "") + t.html :
         '<p class="no-comments">' + (canComment ? "Chưa có tin nhắn. Rê chuột vào ảnh, tiến độ hay một mục bất kỳ để nhận xét đúng chỗ, hoặc viết chung ở dưới." : "Chưa có nhận xét.") + "</p>") +
@@ -313,7 +331,7 @@
     const open = items.filter((x) => !x.c.resolved), done = items.filter((x) => x.c.resolved);
     const shown = !!ui.showResolved.all;
     const li = (x) => renderMsg(x.g, x.c, true, true);
-    return "<h4>" + (chatOn ? "Trao đổi" : "Nhận xét") + (open.length ? " (" + open.length + ")" : "") + "</h4>" +
+    return '<h4 class="thread-title">Chưa giải quyết' + (open.length ? '<span class="count">' + open.length + "</span>" : "") + "</h4>" +
       (!items.length ? '<p class="no-comments">Chưa có nhận xét nào. Rê chuột vào một phần bất kỳ của trang rồi bấm "Nhận xét", hoặc viết ở dưới.</p>' :
         (!open.length ? '<p class="no-comments">Mọi nhận xét đã được giải quyết.</p>' : "") +
         (open.length ? '<ul class="thread">' + open.map(li).join("") + "</ul>" : "") +
@@ -898,8 +916,7 @@
     const t = threadList(g, list, "pop:" + p.id, false, " pop-thread");
     let incoming = "";
     if (ui.incoming && ui.incoming.tid === p.id) {
-      incoming = '<ul class="thread pop-thread"><li class="msg from-link"><div class="msg-meta"><b>' + esc(ui.incoming.a || "Người nhận xét") + "</b><time>" + esc(fmtTime(ui.incoming.t)) +
-        '</time><span class="badge">từ link email</span></div><p class="bubble">' + esc(ui.incoming.m) + "</p></li></ul>";
+      incoming = '<ul class="thread pop-thread">' + msgShell({ cls: " from-link", author: ui.incoming.a || "Người nhận xét", time: ui.incoming.t, text: ui.incoming.m, badge: '<span class="badge">từ link email</span>' }) + "</ul>";
     }
     return t.html + incoming;
   }
@@ -1121,7 +1138,7 @@
     (state.comments[g.id] = state.comments[g.id] || []).push(c);
     ui.drafts[draftKey] = "";
     save(); render();
-    if (!ui.editing && notifyConfigured()) {
+    if (!ui.editing && !isOwner() && notifyConfigured()) {
       toast("Đang gửi nhận xét…");
       postNotify(subjectFor(g, c), buildFeedback([{ g: g, c: c }]), author)
         .then(() => { c.notified = true; save(); render(); toast("Đã gửi nhận xét cho người làm"); })
@@ -2147,7 +2164,7 @@
     const body = $("rs-body");
     if (ui.chatGame === "all" || sel.value === "all") { // mục mặc định: tất cả nhận xét của cả trang
       body.setAttribute("data-game", "all");
-      body.innerHTML = '<h3 class="rs-game">Tất cả nhận xét</h3>' + renderAllComments();
+      body.innerHTML = renderAllComments();
       return;
     }
     const g = chatTarget();
