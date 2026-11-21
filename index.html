@@ -96,10 +96,12 @@
     <button id="toast-undo" hidden>Hoàn tác</button>
   </div>
 
-  <!-- Nạp data.js kèm mã thời gian để luôn lấy bản mới nhất sau khi lưu lên web (tránh bị cache) -->
+  <!-- Nạp data.js và app.js kèm mã thời gian để luôn lấy bản mới nhất (tránh bản cũ nằm trong bộ nhớ đệm
+       làm trang lệch phiên bản và trắng trang sau mỗi lần cập nhật code) -->
   <script>
     (function () {
-      ["data.js?v=" + Date.now(), "app.js"].forEach(function (src) {
+      var v = Date.now();
+      ["data.js?v=" + v, "app.js?v=" + v].forEach(function (src) {
         var s = document.createElement("script");
         s.src = src;
         s.async = false; // giữ đúng thứ tự: data.js chạy trước app.js

@@ -5,7 +5,10 @@
   const KEY = "game-progress-state-v1";
   const MODE_KEY = "game-progress-edit-mode";
   const NAME_KEY = "game-progress-author";
-  const $ = (id) => document.getElementById(id);
+  // Nếu trình duyệt đang giữ bản index.html cũ (thiếu một số nút mà app.js mới cần), trả về phần tử "rỗng" vô hại
+  // thay vì để lỗi làm trắng cả trang.
+  const ghosts = {};
+  const $ = (id) => document.getElementById(id) || (ghosts[id] = ghosts[id] || document.createElement("div"));
   // state = các chỉnh sửa chưa lưu lên web (nằm trong trình duyệt này):
   // fields/links/images/moved/newGames/taskText là sửa trực tiếp trên trang, các mục còn lại như cũ.
   const EMPTY = () => ({
